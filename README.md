@@ -11,7 +11,7 @@
   - [Training a classifier](#training-a-classifier)
   - [Using a classifier for inference](#classifier-inference)
     <!-- - Interacting with Allas -->
-  - [Post analysis of prediction](#post-analysis-of-predictions)
+  - [Analysing results](#Analysing-results)
     - [Inspecting prediction results](#inspect-predictions)
     - [Manual labeling](#label-new-images)
     - [Creating plots from prediction results](#plotting-results)
