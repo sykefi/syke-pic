@@ -1,0 +1,50 @@
+default 0.8
+Amylax_triacantha
+Aphanizomenon_flosaquae 0.55
+Aphanothece_paralleliformis
+Beads 0.9
+Centrales_sp
+Ceratoneis_closterium 0.55
+Chaetoceros_sp 0.9
+Chlorococcales
+Chroococcales
+Chroococcus_small
+Ciliata 0.55
+Cryptomonadales
+Cryptophyceae-Teleaulax
+Cyclotella_choctawhatcheeana
+Cymbomonas_tetramitiformis 0.6
+Dinophyceae
+Dinophysis_acuminata
+Dolichospermum_Anabaenopsis 0.6
+Dolichospermum_Anabaenopsis_round_curly 0.6
+Euglenophyceae
+Eutreptiella_sp
+Gonyaulax_verior
+Gymnodiniales
+Gymnodinium_like
+Heterocapsa_rotundata
+Heterocapsa_triquetra
+Heterocyte
+Katablepharis_remigera
+Licmophora_sp
+Melosira_arctica
+Merismopedia_sp
+Mesodinium_rubrum
+Monoraphidium_contortum
+Nitzschia_paleacea
+Nodularia_spumigena
+Oocystis_sp
+Oscillatoriales
+Pauliella_taeniata
+Pennales_sp_thick 0.7
+Pennales_sp_thin 0.7
+Peridiniella_catenata_chain 0.95
+Peridiniella_catenata_single 0.95
+Prorocentrum_cordatum
+Pseudopedinella_sp
+Pyramimonas_sp 0.9
+Skeletonema_marinoi
+Snowella_Woronichinia_sp
+Thalassiosira_levanderi
+Uroglenopsis_sp 0.9

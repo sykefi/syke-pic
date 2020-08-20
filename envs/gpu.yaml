@@ -1,0 +1,17 @@
+name: sykepic
+channels:
+    - pytorch
+dependencies:
+    - python
+    - pip
+    - numpy
+    - pandas
+    - jupyter
+    - matplotlib
+    - scikit-learn
+    - opencv
+    - tqdm
+    - boto3
+    - pytorch
+    - torchvision
+    - cudatoolkit=10.2

@@ -1,0 +1,12 @@
+name: sykepic
+dependencies:
+    - python
+    - pip
+    - numpy
+    - pandas
+    - jupyter
+    - matplotlib
+    - scikit-learn
+    - opencv
+    - tqdm
+    - boto3

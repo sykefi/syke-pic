@@ -1,0 +1,55 @@
+                                         precision    recall  f1-score   support
+
+                      Amylax_triacantha       1.00      0.75      0.86         4
+                Aphanizomenon_flosaquae       1.00      0.99      1.00      1398
+            Aphanothece_paralleliformis       1.00      1.00      1.00         6
+                                  Beads       1.00      1.00      1.00        25
+                           Centrales_sp       0.98      0.99      0.98        96
+                  Ceratoneis_closterium       1.00      1.00      1.00         9
+                         Chaetoceros_sp       0.97      0.99      0.98       319
+                         Chlorococcales       0.86      0.63      0.73        19
+                          Chroococcales       0.88      1.00      0.94        29
+                      Chroococcus_small       0.99      0.98      0.99       166
+                                Ciliata       0.96      0.96      0.96        48
+                        Cryptomonadales       0.90      0.92      0.91       142
+                Cryptophyceae-Teleaulax       1.00      0.99      1.00      1419
+           Cyclotella_choctawhatcheeana       0.89      0.81      0.85        21
+             Cymbomonas_tetramitiformis       1.00      1.00      1.00        40
+                            Dinophyceae       0.91      0.97      0.94       286
+                   Dinophysis_acuminata       0.94      1.00      0.97        44
+            Dolichospermum_Anabaenopsis       0.99      0.99      0.99      2456
+Dolichospermum_Anabaenopsis_round_curly       0.96      0.97      0.97       501
+                         Euglenophyceae       0.95      0.90      0.93        21
+                        Eutreptiella_sp       0.97      0.97      0.97       450
+                       Gonyaulax_verior       0.67      0.80      0.73         5
+                          Gymnodiniales       1.00      1.00      1.00        14
+                       Gymnodinium_like       0.91      0.68      0.78        31
+                  Heterocapsa_rotundata       1.00      0.99      1.00       123
+                  Heterocapsa_triquetra       0.99      0.98      0.98       655
+                             Heterocyte       0.98      0.98      0.98        52
+                 Katablepharis_remigera       1.00      0.73      0.84        11
+                          Licmophora_sp       0.93      0.93      0.93        15
+                       Melosira_arctica       0.88      0.88      0.88         8
+                        Merismopedia_sp       0.94      0.84      0.89        19
+                      Mesodinium_rubrum       1.00      0.99      0.99       227
+                Monoraphidium_contortum       0.99      1.00      0.99        66
+                     Nitzschia_paleacea       1.00      1.00      1.00        13
+                    Nodularia_spumigena       0.89      1.00      0.94        34
+                            Oocystis_sp       0.95      0.95      0.95       169
+                        Oscillatoriales       1.00      1.00      1.00       888
+                     Pauliella_taeniata       1.00      1.00      1.00        24
+                      Pennales_sp_thick       0.98      0.95      0.96        42
+                       Pennales_sp_thin       0.99      0.99      0.99       156
+            Peridiniella_catenata_chain       0.97      1.00      0.99        38
+           Peridiniella_catenata_single       0.99      0.97      0.98       180
+                  Prorocentrum_cordatum       0.98      0.98      0.98        55
+                     Pseudopedinella_sp       1.00      0.92      0.96        76
+                         Pyramimonas_sp       0.98      0.98      0.98       245
+                    Skeletonema_marinoi       1.00      0.99      0.99       825
+               Snowella_Woronichinia_sp       0.99      0.99      0.99       590
+                Thalassiosira_levanderi       0.98      1.00      0.99       508
+                        Uroglenopsis_sp       0.97      0.98      0.98       103
+
+                               accuracy                           0.98     12671
+                              macro avg       0.96      0.95      0.95     12671
+                           weighted avg       0.99      0.98      0.98     12671
