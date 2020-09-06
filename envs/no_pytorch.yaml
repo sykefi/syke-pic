@@ -7,6 +7,7 @@ dependencies:
     - jupyter
     - matplotlib
     - scikit-learn
-    - opencv
     - tqdm
     - boto3
+    - pip:
+        - opencv-python-headless

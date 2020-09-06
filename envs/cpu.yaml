@@ -9,9 +9,10 @@ dependencies:
     - jupyter
     - matplotlib
     - scikit-learn
-    - opencv
     - tqdm
     - boto3
     - pytorch
     - torchvision
     - cpuonly
+    - pip:
+        - opencv-python-headless
