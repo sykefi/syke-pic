@@ -5,13 +5,12 @@ import shutil
 
 
 def main(args):
-    create_dataset(args.orig, args.new, args.min, args.max, args.exclude)
+    create_dataset(args.original, args.new, args.min, args.max, args.exclude)
 
 
 def create_dataset(original_dataset, new_dataset, min_N, max_N, exclude):
     print(f'[INFO] Creating new dataset in {new_dataset}')
-    class_names = filter_classes(
-        original_dataset, new_dataset, min_N, None, exclude)
+    class_names = filter_classes(original_dataset, min_N, None, exclude)
     copy_dataset(original_dataset, new_dataset, class_names, max_N)
 
 
