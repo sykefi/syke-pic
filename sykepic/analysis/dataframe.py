@@ -59,7 +59,7 @@ def frequency_df(predict_dir, conf_thres=None, start=None, end=None,
     print(f'[INFO] Using predictions from {len(csv_date_list)} samples')
     df = csv_to_df(csv_date_list)
     if conf_thres:
-        df = filter_by_confidence(df, conf_thres)
+        df = read_thresholds(df, conf_thres, filter=True)
     df = group_predictions(df)
     return df
 
@@ -137,7 +137,7 @@ def csv_to_df(csv_date_list):
     return df
 
 
-def filter_by_confidence(df, threshold):
+def read_thresholds(df, threshold, filter=False):
     if not isinstance(threshold, (float, str, Path)):
         raise ValueError('Threshold can be either float, list, or Path')
     if isinstance(threshold, float):
@@ -147,6 +147,7 @@ def filter_by_confidence(df, threshold):
         # Read threshold values from a whitespace separated file
         conf_df = pd.read_csv(threshold, header=None,
                               index_col=0, delim_whitespace=True)
+        df['prediction'] = df['prediction'].astype('category')
         classes = df.prediction.cat.categories
         # If default value is not given,
         # make sure all classes are given a threshold value
@@ -162,8 +163,10 @@ def filter_by_confidence(df, threshold):
         conf_df = conf_df.fillna(conf_df.iloc[0])
         # Add class threshold to each row of main df
         df['threshold'] = conf_df.loc[df['prediction'], 1].tolist()
-    # Filter each row of main df by it's new threhold
-    return df[df['confidence'] >= df['threshold']]
+    if filter:
+        # Filter each row of main df by it's new threhold
+        return df[df['confidence'] >= df['threshold']]
+    return df
 
 
 def group_predictions(df):
