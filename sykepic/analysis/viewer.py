@@ -109,7 +109,16 @@ class PredictionViewer():
                         self.extra_labels.append(p.name)
 
         elif self.evaluate:
-            self.eval_log = self.work_dir/f'{self.sample}.eval.log'
+            self.eval_log = self.work_dir/f'{self.sample}.eval.csv'
+            if Path(self.eval_log).is_file():
+                print('[INFO] Using previous evaluation file found for this '
+                      f'sample in:\n\t{self.eval_log}')
+                print('[INFO] Remove it manually to start from scratch')
+                with open(self.eval_log) as fh:
+                    fh.readline()
+                    for line in fh:
+                        line = line.strip().split(',')
+                        self.eval_dict[int(line[0])] = (line[1], line[2])
             self.df = read_thresholds(self.df, thresholds, filter=False)
 
         self.item_layout = Layout(
