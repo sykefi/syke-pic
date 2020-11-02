@@ -49,6 +49,10 @@ class PredictionViewer():
 
     def __init__(self, prediction_csv, raw_dir, work_dir='PredictionViewer',
                  label=False, evaluate=False, thresholds=None, keep_images=False):
+
+        if label and evaluate:
+            raise ValueError('Choose either label or evaluate, not both.')
+
         self.work_dir = Path(work_dir)
         # Read csv to pandas DataFrame
         if isinstance(prediction_csv, list):
@@ -85,31 +89,30 @@ class PredictionViewer():
 
         if self.label:
             # Update progress or start new
-            log_dir = self.work_dir/'.labeled'
-            self.log = log_dir/f'{self.sample}_labeled.csv'
-            if self.log.is_file():
-                with open(self.log) as fh:
+            self.lab_dir = self.work_dir/'labeling'
+            self.lab_log = self.lab_dir/f'{self.sample}.lab.csv'
+            if self.lab_log.is_file():
+                with open(self.lab_log) as fh:
                     for i, line in enumerate(fh, start=1):
                         roi, label = line.strip().split(',')
                         self.moved.append(int(roi))
                 print(
-                    f"[INFO] Skipped {i} previously labeled images in '{self.log}'")
+                    f"[INFO] Skipped {i} previously labeled images in '{self.lab_log}'")
             else:
-                print(f"[INFO] Creating a new progress file in '{self.log}'")
-                Path.mkdir(log_dir, parents=True, exist_ok=True)
+                print(f"[INFO] Creating a new progress file in '{self.lab_log}'")
+                Path.mkdir(self.lab_dir, parents=True, exist_ok=True)
             self.extra_labels = ['', 'New_Class', ]
             # Add any novel class labels found in work_dir
-            for p in self.work_dir.iterdir():
+            for p in self.lab_dir.iterdir():
                 if p.is_dir():
-                    cond_1 = not p.name.startswith('.')
-                    cond_2 = not p.name.endswith('images')
-                    cond_3 = p.name not in self.extra_labels
-                    cond_4 = p.name not in self.df.columns[2:]
-                    if all((cond_1, cond_2, cond_3, cond_4)):
+                    cond_1 = p.name not in self.extra_labels
+                    cond_2 = p.name not in self.df.columns[2:]
+                    if all((cond_1, cond_2)):
                         self.extra_labels.append(p.name)
 
         elif self.evaluate:
-            self.eval_log = self.work_dir/f'{self.sample}.eval.csv'
+            self.eval_dir = self.work_dir/'evaluation'
+            self.eval_log = self.eval_dir/f'{self.sample}.eval.csv'
             if Path(self.eval_log).is_file():
                 print('[INFO] Using previous evaluation file found for this '
                       f'sample in:\n\t{self.eval_log}')
@@ -119,6 +122,8 @@ class PredictionViewer():
                     for line in fh:
                         line = line.strip().split(',')
                         self.eval_dict[int(line[0])] = (line[1], line[2])
+            else:
+                Path.mkdir(self.eval_dir, parents=True, exist_ok=True)
             self.df = read_thresholds(self.df, thresholds, filter=False)
 
         self.item_layout = Layout(
@@ -390,7 +395,7 @@ class PredictionViewer():
             self._cleanup()
             return
         print(f'[INFO] Total labeled images: {len(self.labeled)}')
-        dest = Text(value=str(self.work_dir),
+        dest = Text(value=str(self.lab_dir),
                     description='Move to:',
                     tooltip='Each label gets a sub-directory automatically')
         move_btn = Button(description='Accept', button_style='success',
@@ -410,7 +415,7 @@ class PredictionViewer():
     def _move_button_handler(self, button):
         clear_output()
         dest_dir = Path(button.dest.value)
-        with open(self.log, 'a') as fh:
+        with open(self.lab_log, 'a') as fh:
             for roi, label in self.labeled.items():
                 label = label.split(' - ')[-1]
                 src = self.img_dir/f'{roi}.png'
