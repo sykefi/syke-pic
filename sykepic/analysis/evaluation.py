@@ -1,29 +1,44 @@
+from collections import Counter
 from pathlib import Path
 
 
-def parse_evaluations(in_files, out_file):
+def parse_evaluations(in_files, out_file, empty='unclassifiable'):
     if isinstance(in_files, (str, Path)):
         in_files = Path(in_files)
         if in_files.is_dir():
             in_files = list(in_files.rglob('*.eval.csv'))
         else:
             in_files = [in_files]
-    eval_results = {}
+    class_results = {}
     for file in in_files:
         with open(file) as fh:
             fh.readline()
             for line in fh:
                 line = line.strip().split(',')
-                for name, res in get_classification_result(line[1], line[2]):
-                    eval_results.setdefault(
-                        name, {'tp': 0, 'fp': 0, 'fn': 0})[res] += 1
+                for name, result in classification_result(
+                        line[1], line[2], empty=empty):
+                    class_results.setdefault(
+                        name, {'tp': 0, 'fp': 0, 'fn': 0})[result] += 1
+    # Total TN = Empty TP
+    total = Counter({'tn': class_results[empty]['tp']})
+    # Empty class is not needed any more
+    del class_results[empty]
+    # Add class results to total
+    for result in class_results.values():
+        total.update(result)
+    # Output scores to file
     with open(out_file, 'w') as fh:
-        fh.write('class,tp,fp,fn\n')
-        for name, res in sorted(eval_results.items()):
-            fh.write(f"{name},{res['tp']},{res['fp']},{res['fn']}\n")
+        fh.write(f'class,precision,recall,f1-score,support,tn-rate\n')
+        prec, rec, F1, sup, spec = classification_scores(
+                total['tp'], total['fp'], total['fn'], tn=total['tn'])
+        fh.write(f'total,{prec:.2f},{rec:.2f},{F1:.2f},{sup},{spec:.2f}\n')
+        for name, values in sorted(class_results.items()):
+            prec, rec, F1, sup, spec = classification_scores(
+                values['tp'], values['fp'], values['fn'])
+            fh.write(f'{name},{prec:.2f},{rec:.2f},{F1:.2f},{sup},\n')
 
 
-def get_classification_result(predicted, actual, empty='unclassifiable'):
+def classification_result(predicted, actual, empty='unclassifiable'):
     if predicted == actual:
         # True positive (nice!)
         # Also True negatives are returned here, i.e. empty, empty
@@ -42,29 +57,23 @@ def get_classification_result(predicted, actual, empty='unclassifiable'):
         return ((predicted, 'fp'), (actual, 'fn'))
 
 
-def classification_error(in_file, empty='unclassifiable'):
-    class_results = {'all': {'tp': 0, 'tn': 0, 'fp': 0, 'fn': 0}}
-    with open(in_file) as fh:
-        fh.readline()
-        for line in fh:
-            line = line.strip().split(',')
-            if line[0] == empty:
-                # TPs of empty class are all of the true negatives (tn)
-                class_results['all']['tn'] = int(line[1])
-            else:
-                tp = int(line[1])
-                fp = int(line[2])
-                fn = int(line[3])
-                class_results[line[0]] = {'tp': tp, 'fp': fp, 'fn': fn}
-                class_results['all']['tp'] += tp
-                class_results['all']['fp'] += fp
-                class_results['all']['fn'] += fn
-    print(f'--- Evaluation Results ---')
-    print(f'Class\tSensitivity\tSpecificity')
-    for name, res in class_results.items():
-        sens = res['tp']/(res['tp']+res['fn'])
-        print(f'{name}\t{sens:.2f}', end='')
-        if name == 'all':
-            spec = res['tn']/(res['tn']+res['fp'])
-            print(f'\t\t{spec:.2f}', end='')
-        print()
+def classification_scores(tp, fp, fn, tn=None):
+    if tp > 0:
+        precision = tp / (tp + fp)
+        recall = tp / (tp + fn)
+        F1 = F_score(precision, recall, beta=1)
+    else:
+        precision = 0
+        recall = 0
+        F1 = 0
+    support = tp + fp + fn
+    if tn:
+        specificity = tn / (tn + fp)
+        support += tn
+    else:
+        specificity = None
+    return (precision, recall, F1, support, specificity)
+
+
+def F_score(precision, recall, beta=1):
+    return (1 + beta**2) * precision * recall / (beta**2 * precision + recall)
