@@ -81,49 +81,52 @@ class PredictionViewer():
         self.raw_dir = raw_dir
         self.label = label
         self.evaluate = evaluate
-        self.thresholds = {}
+        self.select = self.label or self.evaluate
+        self.thresholds = bool(thresholds)
         self.keep_images = keep_images
         self.labeled = {}
         self.moved = []
-        self.eval_dict = {}
+        # self.eval_dict = {}
 
-        if self.label:
+        if self.select:
             # Update progress or start new
-            self.lab_dir = self.work_dir/'labeling'
-            self.lab_log = self.lab_dir/f'{self.sample}.lab.csv'
-            if self.lab_log.is_file():
-                with open(self.lab_log) as fh:
+            if self.evaluate:
+                self.sel_dir = self.work_dir/'evaluate'
+            else:
+                self.sel_dir = self.work_dir/'label'
+            self.sel_log = self.sel_dir/f'{self.sample}.select.csv'
+            self.moved_log = self.sel_dir/f'{self.sample}.moved.csv'
+            if self.label and self.moved_log.is_file():
+                with open(self.moved_log) as fh:
                     for i, line in enumerate(fh, start=1):
                         roi, label = line.strip().split(',')
                         self.moved.append(int(roi))
-                print(
-                    f"[INFO] Skipped {i} previously labeled images in '{self.lab_log}'")
-            else:
-                print(f"[INFO] Creating a new progress file in '{self.lab_log}'")
-                Path.mkdir(self.lab_dir, parents=True, exist_ok=True)
-            self.extra_labels = ['', 'New_Class', ]
-            # Add any novel class labels found in work_dir
-            for p in self.lab_dir.iterdir():
-                if p.is_dir():
-                    cond_1 = p.name not in self.extra_labels
-                    cond_2 = p.name not in self.df.columns[2:]
-                    if all((cond_1, cond_2)):
-                        self.extra_labels.append(p.name)
-
-        elif self.evaluate:
-            self.eval_dir = self.work_dir/'evaluation'
-            self.eval_log = self.eval_dir/f'{self.sample}.eval.csv'
-            if Path(self.eval_log).is_file():
-                print('[INFO] Using previous evaluation file found for this '
-                      f'sample in:\n\t{self.eval_log}')
+                print(f'[INFO] Skipped {i} previously labeled images in '
+                      f"'{self.moved_log}'")
+            if self.sel_log.is_file():
+                print('[INFO] Using previous selections for this '
+                      f'sample from:\n\t{self.sel_log}')
                 print('[INFO] Remove it manually to start from scratch')
-                with open(self.eval_log) as fh:
-                    fh.readline()
+                with open(self.sel_log) as fh:
                     for line in fh:
-                        line = line.strip().split(',')
-                        self.eval_dict[int(line[0])] = (line[1], line[2])
+                        roi, name = line.strip().split(',')
+                        self.labeled[int(roi)] = name
             else:
-                Path.mkdir(self.eval_dir, parents=True, exist_ok=True)
+                print(
+                    f"[INFO] Creating a new progress file in '{self.sel_log}'")
+                Path.mkdir(self.sel_dir, parents=True, exist_ok=True)
+            if self.label:
+                self.extra_labels = ['New_Class']
+                # Add any novel class labels found in work_dir
+                for p in self.sel_dir.iterdir():
+                    if p.is_dir():
+                        cond_1 = p.name not in self.extra_labels
+                        cond_2 = p.name not in self.df.columns[2:]
+                        cond_3 = p.name != 'unclassifiable'
+                        if all((cond_1, cond_2, cond_3)):
+                            self.extra_labels.append(p.name)
+
+        if self.thresholds:
             self.df = read_thresholds(self.df, thresholds, filter=False)
 
         self.item_layout = Layout(
@@ -274,14 +277,14 @@ class PredictionViewer():
                              layout=self.main_container_layout)
         display(main_container)
         print(f'Page {self.current_page+1} / {len(self.pages)}')
-        if self.evaluate:
-            self._log_evaluations()
+        if self.select:
+            self._log_selections()
 
     def _new_item(self, roi):
         row = self.df.loc[roi]
         confidence = row['confidence']
-        if self.evaluate:
-            # thresholds column was added to df, so ignore it
+        if self.thresholds:
+            # thresholds column was added to df, so don't include it
             probs = row[2:-1].sort_values(ascending=False)
         else:
             probs = row[2:].sort_values(ascending=False)
@@ -306,59 +309,38 @@ class PredictionViewer():
                 print(f'[INFO] Try deleting {self.work_dir}/images')
                 return
             label = Label(f'{roi} - {confidence:.5f}')
+        options = [''] + \
+            [f'{prob:.5f} - {name}' for name, prob in probs.items()]
+        current_prediction = options[1]
+        # Select empty choice when under threshold or
+        # doing labeling without thresholds
+        if (self.thresholds and confidence < row['threshold']) or \
+                (not self.thresholds and self.label):
+            current_prediction = options[0]
+        if self.select:
+            if roi in self.labeled:
+                # Set to previous selection
+                previous = self.labeled[roi]
+                if previous == 'unclassifiable':
+                    previous = ''
+                else:
+                    for option in options:
+                        if previous in option:
+                            previous = option
+                            break
+                if previous != current_prediction:
+                    # Previous selection was a correction
+                    # Add check mark to distinguish this
+                    label.value = '\N{White Heavy Check Mark} ' + label.value
+                    current_prediction = previous
+            else:
+                self.labeled[roi] = current_prediction.split(' - ')[-1]
         if self.label:
-            options = self.extra_labels.copy()
-        elif self.evaluate:
-            options = ['']
-        else:
-            options = []
-        options.extend(
-            [f'{prob:.5f} - {name}' for name, prob in probs.items()])
-        dropdown = Dropdown(
-            options=options, value=self.labeled.get(roi, options[0]))
-        # DISABLED FEATURE
-        # Add a hidden textbox for entering new class names.
-        # This textbox and dropdown are linked, and the textbox will become
-        # visible once 'New Class' is selected from dropdown.
-        # textbox = Text(placeholder='Enter new class name here')
-        # textbox.layout.visibility = 'hidden'
-        # dropdown.textbox = textbox
-        if self.label:
+            options.insert(1, *self.extra_labels)
+        dropdown = Dropdown(options=options, value=current_prediction)
+        if self.select:
             # Add listener to dropdown menu
             dropdown.observe(self._dropdown_handler(roi), names='value')
-        # item_children = [img, label, dropdown]
-        if self.evaluate:
-            # Just select class from dropdown if above threshold, otherwise empty selection.
-            # When user changes selection, it will be handled accordingly
-            # i.e.
-            # this  -> empty : FP
-            # this  -> other : FP + FN (other)
-            # empty -> this  : FN
-            # empty -> other : FN (other)
-
-            pred_class = 'unclassifiable'
-            if confidence >= row['threshold']:
-                pred_class = probs.index[0]
-                dropdown.value = options[1]
-            self.eval_dict.setdefault(roi, (pred_class, pred_class))
-            dropdown.observe(
-                self._dropdown_handler_eval(roi, pred_class), names='value')
-            if roi in self.eval_dict:
-                # ROI has already been processed (on a previous page)
-                pred_class, selected_class = self.eval_dict[roi]
-                # Check if user had changed ROI's class
-                if pred_class != selected_class:
-                    # Add check mark to label
-                    label.value = '\N{White Heavy Check Mark} ' + label.value
-                    # Set previous dropdown selection
-                    if selected_class == 'unclassifiable':
-                        dropdown.value = ''
-                    else:
-                        for option in options:
-                            if selected_class in option:
-                                dropdown.value = option
-                                break
-
         item = Box(children=[img, label, dropdown], layout=self.item_layout)
         return item
 
@@ -388,75 +370,68 @@ class PredictionViewer():
 
     def _end_button_handler(self, button):
         clear_output()
+        if self.select:
+            self._log_selections()
         if not self.label or not self.labeled:
-            if self.evaluate:
-                self._log_evaluations()
-            print('[INFO] Program exited with no images labeled')
             self._cleanup()
             return
-        print(f'[INFO] Total labeled images: {len(self.labeled)}')
-        dest = Text(value=str(self.lab_dir),
-                    description='Move to:',
-                    tooltip='Each label gets a sub-directory automatically')
-        move_btn = Button(description='Accept', button_style='success',
-                          tooltip='Move labeled images and exit')
-        move_btn.dest = dest
-        move_btn.on_click(self._move_button_handler)
-        back_btn = Button(description='Back', button_style='info',
-                          tooltip='Back to previous page')
-        back_btn.on_click(self._show_current_page)
-        quit_btn = Button(description='Quit', button_style='danger',
-                          tooltip='Exit without saving labels')
-        quit_btn.on_click(self._quit_button_handler)
-        buttons = Box(children=[quit_btn, back_btn, move_btn],
-                      layout=Layout(margin='30px 0 10px 0'))
-        display(VBox([dest, buttons]))
+        if self.label:
+            print(f'[INFO] Total labeled images: {len(self.labeled)}')
+            dest = Text(value=str(self.sel_dir),
+                        description='Move to:',
+                        tooltip='Each label gets a sub-directory automatically')
+            move_btn = Button(description='Accept', button_style='success',
+                              tooltip='Move labeled images and exit')
+            move_btn.dest = dest
+            move_btn.on_click(self._move_button_handler)
+            back_btn = Button(description='Back', button_style='info',
+                              tooltip='Back to previous page')
+            back_btn.on_click(self._show_current_page)
+            quit_btn = Button(description='Quit', button_style='danger',
+                              tooltip='Exit without saving labels')
+            quit_btn.on_click(self._quit_button_handler)
+            buttons = Box(children=[quit_btn, back_btn, move_btn],
+                          layout=Layout(margin='30px 0 10px 0'))
+            display(VBox([dest, buttons]))
 
     def _move_button_handler(self, button):
+        # TODO: Add option to not copy certain classes, such as unclassifiable
         clear_output()
         dest_dir = Path(button.dest.value)
-        with open(self.lab_log, 'a') as fh:
+        with open(self.moved_log, 'a') as fh:
             for roi, label in self.labeled.items():
                 label = label.split(' - ')[-1]
                 src = self.img_dir/f'{roi}.png'
                 dst = dest_dir/label/f'{self.sample}_{roi}.png'
                 dst.parent.mkdir(parents=True, exist_ok=True)
-                shutil.move(src, dst)
+                if not label:
+                    label = 'unclassifiable'
+                else:
+                    # Only move those that are not 'unclassifiable'
+                    shutil.move(src, dst)
                 fh.write(f'{roi},{label}\n')
                 print(f'[INFO] Moved {roi} to {dst}')
                 # In case user wants to start again
                 self.moved.append(roi)
         self.labeled = {}
+        self.sel_log.unlink()
         self._cleanup()
 
     def _quit_button_handler(self, button):
         clear_output()
-        print('[INFO] Program exited with unsaved labels')
         self._cleanup()
 
     def _dropdown_handler(self, roi):
         def handler(change):
-            # if change.new == 'New Class':
-            #     textbox.layout.visibility = 'visible'
-            if change.new == '':
-                del self.labeled[roi]
-            else:
-                # textbox.layout.visibility = 'hidden'
-                self.labeled[roi] = change.new
-
+            self.labeled[roi] = change.new.split(' - ')[-1]
         return handler
 
-    def _dropdown_handler_eval(self, roi, pred_class):
-        def handler(change):
-            selected_class = change.new.split(' - ')[-1]
-            self.eval_dict[roi] = (
-                pred_class if pred_class else 'unclassifiable',
-                selected_class if selected_class else 'unclassifiable')
-        return handler
-
-    def _log_evaluations(self):
-        data = 'roi,prediction,actual\n'
-        for roi, values in self.eval_dict.items():
-            data += f"{roi},{values[0]},{values[1]}\n"
-        with open(self.eval_log, 'w') as fh:
+    def _log_selections(self):
+        data = ''
+        for roi, selection in self.labeled.items():
+            if not selection:
+                # Set empty selection to a string
+                selection = 'unclassifiable'
+            data += f"{roi},{selection}\n"
+        with open(self.sel_log, 'w') as fh:
             fh.write(data)
