@@ -8,9 +8,8 @@ import pandas as pd
 from IPython.display import clear_output, display
 from ipywidgets import Box, Button, Dropdown, Image, Label, Layout, Text, VBox
 
-from .dataframe import insert_pred_conf
+from .dataframe import read_predictions
 from sykepic.predict import ifcb
-from sykepic.analysis.dataframe import read_thresholds
 
 
 class PredictionViewer():
@@ -21,7 +20,7 @@ class PredictionViewer():
 
     Parameters
     ----------
-    prediction_csv : str, Path, list
+    predictions : str, Path, list
         Path to csv-file with predictions. You can provide
         more than one prediction file when doing class inspection.
         Only one file is allowed at a time for active labeling.
@@ -47,46 +46,34 @@ class PredictionViewer():
           prediction_filter=None, class_inspect=False)
     """
 
-    def __init__(self, prediction_csv, raw_dir, work_dir='PredictionViewer',
-                 label=False, evaluate=False, thresholds=None, keep_images=False):
+    def __init__(self, predictions, raw_dir, work_dir='PredictionViewer',
+                 label=False, evaluate=False, thresholds=0.0, keep_images=False):
 
         if label and evaluate:
             raise ValueError('Choose either label or evaluate, not both.')
 
         self.work_dir = Path(work_dir)
-        # Read csv to pandas DataFrame
-        if isinstance(prediction_csv, list):
+        # This is not the best way to handle img sub dirs
+        if isinstance(predictions, list):
             assert not (label or evaluate), \
                 'Labeling and evaluation is allowed one sample a time'
-            df_list = []
-            # self.sample = []
             self.img_dir = {}
-            for csv in prediction_csv:
+            for csv in predictions:
                 sample = Path(csv).with_suffix('').name
-                df = pd.read_csv(csv)  # .drop('roi', 1)
-                df.insert(0, 'sample', sample)
-                # Create multi-index from sample name and roi number
-                df.set_index(['sample', 'roi'], inplace=True)
-                df_list.append(df)
                 self.img_dir[sample] = self.work_dir/'images'/sample
-            self.df = pd.concat(df_list)
         else:
-            self.df = pd.read_csv(prediction_csv, index_col=0)
-            self.sample = Path(prediction_csv).with_suffix('').name
+            self.sample = Path(predictions).with_suffix('').name
             self.img_dir = self.work_dir/'images'/self.sample
 
-        # Insert 'prediction' and 'confidence' columns to dataframe
-        insert_pred_conf(self.df)
+        self.df = read_predictions(predictions, thresholds)
 
         self.raw_dir = raw_dir
         self.label = label
         self.evaluate = evaluate
         self.select = self.label or self.evaluate
-        self.thresholds = bool(thresholds)
         self.keep_images = keep_images
         self.labeled = {}
         self.moved = []
-        # self.eval_dict = {}
 
         if self.select:
             # Update progress or start new
@@ -125,9 +112,6 @@ class PredictionViewer():
                         cond_3 = p.name != 'unclassifiable'
                         if all((cond_1, cond_2, cond_3)):
                             self.extra_labels.append(p.name)
-
-        if self.thresholds:
-            self.df = read_thresholds(self.df, thresholds, filter=False)
 
         self.item_layout = Layout(
             display='flex',
@@ -173,9 +157,6 @@ class PredictionViewer():
         prediction_filter : str, list
             Filter images by prediction (class name)
         """
-
-        # assert not (class_inspect and self.label), \
-        #     'Class inspection is not available when labeling'
 
         # Extract images only if they don't already exist
         # Multiple samples
@@ -283,11 +264,7 @@ class PredictionViewer():
     def _new_item(self, roi):
         row = self.df.loc[roi]
         confidence = row['confidence']
-        if self.thresholds:
-            # thresholds column was added to df, so don't include it
-            probs = row[2:-1].sort_values(ascending=False)
-        else:
-            probs = row[2:].sort_values(ascending=False)
+        probs = row[3:].sort_values(ascending=False)
         if isinstance(self.img_dir, dict):
             # Extract multi-index
             sample, roi_num = roi
@@ -311,11 +288,10 @@ class PredictionViewer():
             label = Label(f'{roi} - {confidence:.5f}')
         options = [''] + \
             [f'{prob:.5f} - {name}' for name, prob in probs.items()]
-        current_prediction = options[1]
-        # Select empty choice when under threshold or
-        # doing labeling without thresholds
-        if (self.thresholds and confidence < row['threshold']) or \
-                (not self.thresholds and self.label):
+        # Select first non-empty option if confidence is above threshold
+        if confidence >= row['threshold']:
+            current_prediction = options[1]
+        else:
             current_prediction = options[0]
         if self.select:
             if roi in self.labeled:

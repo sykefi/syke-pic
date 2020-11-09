@@ -58,8 +58,9 @@ def frequency_df(predict_dir, conf_thres=None, start=None, end=None,
         return
     print(f'[INFO] Using predictions from {len(csv_date_list)} samples')
     df = csv_to_df(csv_date_list)
-    if conf_thres:
-        df = read_thresholds(df, conf_thres, filter=True)
+    # TODO: Fix this below. maybe: df[df['confidence'] >= df['threshold']]
+    # if conf_thres:
+    #     df = read_thresholds(df, conf_thres, filter=True)
     df = group_predictions(df)
     return df
 
@@ -124,7 +125,7 @@ def csv_to_df(csv_date_list):
         # Read sample predictions to df, without 'roi'
         sample_df = pd.read_csv(csv).drop('roi', axis=1)
         # Insert 'prediction' and 'confidence' columns.
-        insert_pred_conf(sample_df)
+        insert_prediction(sample_df)
         # Drop all class probability columns, since they aren't needed
         sample_df.drop(sample_df.columns[2:], axis=1, inplace=True)
         # Insert 'timestamp' column
@@ -137,12 +138,12 @@ def csv_to_df(csv_date_list):
     return df
 
 
-def read_thresholds(df, threshold, filter=False):
+def insert_threshold(df, threshold, filter=False):
     if not isinstance(threshold, (float, str, Path)):
         raise ValueError('Threshold can be either float, list, or Path')
     if isinstance(threshold, float):
         # Add default threshold to each row
-        df['threshold'] = threshold
+        df.insert(2, 'threshold', threshold)
     else:
         # Read threshold values from a whitespace separated file
         conf_df = pd.read_csv(threshold, header=None,
@@ -162,11 +163,7 @@ def read_thresholds(df, threshold, filter=False):
         # Fill missing values with default threshold
         conf_df = conf_df.fillna(conf_df.iloc[0])
         # Add class threshold to each row of main df
-        df['threshold'] = conf_df.loc[df['prediction'], 1].tolist()
-    if filter:
-        # Filter each row of main df by it's new threhold
-        return df[df['confidence'] >= df['threshold']]
-    return df
+        df.insert(2, 'threshold', conf_df.loc[df['prediction'], 1].tolist())
 
 
 def group_predictions(df):
@@ -176,9 +173,32 @@ def group_predictions(df):
     return df
 
 
-def insert_pred_conf(df):
+def insert_prediction(df):
     """This function modifies `df` in place"""
     # Prediction is the column with max softmax value
     df.insert(0, 'prediction', df.idxmax(axis=1))
     # Confidence is said softmax value
     df.insert(1, 'confidence', df.iloc[:, 1:].max(axis=1))
+
+
+def read_predictions(predictions, thresholds=0.0):
+    if isinstance(predictions, list):
+        # Need to join multiple csv-files as one df
+        df_list = []
+        for csv in predictions:
+            df = pd.read_csv(csv)
+            # Create multi-index from sample name and roi number
+            sample = Path(csv).with_suffix('').name
+            df.insert(0, 'sample', sample)
+            df.set_index(['sample', 'roi'], inplace=True)
+            df_list.append(df)
+        df = pd.concat(df_list)
+    elif isinstance(predictions, (str, Path)):
+        df = pd.read_csv(predictions, index_col=0)
+    else:
+        raise ValueError('Check predictions path')
+    # Insert 'prediction' and 'confidence' columns to dataframe
+    insert_prediction(df)
+    # Insert 'threshold' column to df (default threholds is 0.0)
+    insert_threshold(df, thresholds)
+    return df

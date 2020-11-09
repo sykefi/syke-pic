@@ -52,7 +52,11 @@ def extract_sample_images(sample, raw_dir, out_dir, exist_ok=False):
         Whether to allow overwriting to existing out_dir
     """
 
-    adc = next(Path(raw_dir).glob(f'**/{sample}.adc'))
+    try:
+        adc = next(Path(raw_dir).glob(f'**/{sample}.adc'))
+    except StopIteration:
+        print(f"[ERROR] Sample '{sample}' not found in '{raw_dir}'")
+        raise
     roi = adc.with_suffix('.roi')
     raw_to_png(adc, roi, out_dir, exist_ok=exist_ok)
 
