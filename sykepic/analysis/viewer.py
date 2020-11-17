@@ -137,7 +137,8 @@ class PredictionViewer():
         )
 
     def start(self, per_page=12, sort_by_confidence=True, sort_by_class=False,
-              ascending=False, prediction_filter=None, class_overview=False):
+              ascending=False, prediction_filter=None, class_overview=False,
+              start_page=1):
         """Start the program
 
         Parameters
@@ -223,7 +224,7 @@ class PredictionViewer():
             for i in range(0, len(self.unlabeled), per_page):
                 self.pages.append(self.unlabeled[i:i+per_page])
 
-        self.current_page = 0
+        self.current_page = start_page - 1
         self._show_current_page()
 
     def _show_current_page(self, *args):
