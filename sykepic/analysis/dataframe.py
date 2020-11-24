@@ -106,7 +106,7 @@ def filter_csv_by_date(predict_dir, start=None, end=None, hour_window=None,
         hour_end = datetime.datetime.strptime(hour_end.strip(), time_format)
     csv_date_list = []
     # for csv in list_files(predict_dir, '.csv'):
-        # list_files() doesn't sort results, so must go through all files
+    # list_files() doesn't sort results, so must go through all files
     for csv in sorted(predict_dir.glob('**/*.csv')):
         date = ifcb.sample_to_datetime(csv.with_suffix('').name)
         if (start and date < start) or (end and date > end):
@@ -138,6 +138,13 @@ def csv_to_df(csv_date_list):
     return df
 
 
+def group_predictions(df):
+    df = df.groupby('timestamp').prediction.value_counts().unstack()
+    df.columns.name = ''
+    df.index.name = ''
+    return df
+
+
 def insert_threshold(df, threshold, filter=False):
     if not isinstance(threshold, (float, str, Path)):
         raise ValueError('Threshold can be either float, list, or Path')
@@ -148,7 +155,6 @@ def insert_threshold(df, threshold, filter=False):
         # Read threshold values from a whitespace separated file
         conf_df = pd.read_csv(threshold, header=None,
                               index_col=0, delim_whitespace=True)
-        df['prediction'] = df['prediction'].astype('category')
         classes = df.prediction.cat.categories
         # If default value is not given,
         # make sure all classes are given a threshold value
@@ -166,22 +172,49 @@ def insert_threshold(df, threshold, filter=False):
         df.insert(2, 'threshold', conf_df.loc[df['prediction'], 1].tolist())
 
 
-def group_predictions(df):
-    df = df.groupby('timestamp').prediction.value_counts().unstack()
-    df.columns.name = ''
-    df.index.name = ''
-    return df
+def threshold_dictionary(thresholds, default=None):
+    thres_dict = {}
+    with open(thresholds) as fh:
+        for line in fh:
+            line = line.strip().split()
+            key = line[0]
+            if len(line) > 1:
+                value = float(line[1])
+            elif default:
+                value = float(default)
+            else:
+                raise ValueError(f'Missing threshold for {key}, '
+                                 'and no default value specified.')
+            thres_dict[key] = value
+    return thres_dict
 
 
-def insert_prediction(df):
+def make_prediction(row, thresholds, empty):
+    if isinstance(thresholds, (int, float)):
+        name = row.idxmax() if row.max() > thresholds else empty
+        return (name, row.max())
+    # Generator for all classes that have condidence above
+    # their specific threshold (sorted by confidence, descending)
+    above_threshold = ((name, confidence) for name, confidence in
+                       row.sort_values(ascending=False).items()
+                       if confidence >= thresholds[name])
+    try:
+        # Return the first value from generator (highest softmax)
+        return next(above_threshold)
+    except StopIteration:
+        return (empty, row.max())
+
+
+def insert_predictions(df, thresholds, empty):
     """This function modifies `df` in place"""
-    # Prediction is the column with max softmax value
-    df.insert(0, 'prediction', df.idxmax(axis=1))
-    # Confidence is said softmax value
-    df.insert(1, 'confidence', df.iloc[:, 1:].max(axis=1))
+    preds, confs = zip(*df.apply(make_prediction, axis=1,
+                                 args=(thresholds, empty)))
+    df.insert(0, 'prediction', preds)
+    df['prediction'] = df['prediction'].astype('category')
+    df.insert(1, 'confidence', confs)
 
 
-def read_predictions(predictions, thresholds=0.0):
+def read_predictions(predictions, thresholds=0.0, empty='unclassifiable'):
     if isinstance(predictions, list):
         # Need to join multiple csv-files as one df
         df_list = []
@@ -197,8 +230,8 @@ def read_predictions(predictions, thresholds=0.0):
         df = pd.read_csv(predictions, index_col=0)
     else:
         raise ValueError('Check predictions path')
+    if isinstance(thresholds, (str, Path)):
+        thresholds = threshold_dictionary(thresholds)
     # Insert 'prediction' and 'confidence' columns to dataframe
-    insert_prediction(df)
-    # Insert 'threshold' column to df (default threholds is 0.0)
-    insert_threshold(df, thresholds)
+    insert_predictions(df, thresholds, empty)
     return df
