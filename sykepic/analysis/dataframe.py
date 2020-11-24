@@ -189,32 +189,32 @@ def threshold_dictionary(thresholds, default=None):
     return thres_dict
 
 
-def make_prediction(row, thresholds, empty):
+def make_prediction(row, thresholds):
     if isinstance(thresholds, (int, float)):
-        name = row.idxmax() if row.max() > thresholds else empty
-        return (name, row.max())
+        name = row.idxmax()
+        return (name, row[name] > thresholds)
     # Generator for all classes that have condidence above
     # their specific threshold (sorted by confidence, descending)
-    above_threshold = ((name, confidence) for name, confidence in
+    above_threshold = ((name, True) for name, confidence in
                        row.sort_values(ascending=False).items()
                        if confidence >= thresholds[name])
     try:
         # Return the first value from generator (highest softmax)
         return next(above_threshold)
     except StopIteration:
-        return (empty, row.max())
+        return (row.idxmax(), False)
 
 
-def insert_predictions(df, thresholds, empty):
+def insert_predictions(df, thresholds):
     """This function modifies `df` in place"""
-    preds, confs = zip(*df.apply(make_prediction, axis=1,
-                                 args=(thresholds, empty)))
+    preds, status = zip(*df.apply(make_prediction, axis=1,
+                                  args=(thresholds,)))
     df.insert(0, 'prediction', preds)
     df['prediction'] = df['prediction'].astype('category')
-    df.insert(1, 'confidence', confs)
+    df.insert(1, 'classified', status)
 
 
-def read_predictions(predictions, thresholds=0.0, empty='unclassifiable'):
+def read_predictions(predictions, thresholds=0.0):
     if isinstance(predictions, list):
         # Need to join multiple csv-files as one df
         df_list = []
@@ -232,6 +232,6 @@ def read_predictions(predictions, thresholds=0.0, empty='unclassifiable'):
         raise ValueError('Check predictions path')
     if isinstance(thresholds, (str, Path)):
         thresholds = threshold_dictionary(thresholds)
-    # Insert 'prediction' and 'confidence' columns to dataframe
-    insert_predictions(df, thresholds, empty)
+    # Insert 'prediction' and 'classified' columns to dataframe
+    insert_predictions(df, thresholds)
     return df

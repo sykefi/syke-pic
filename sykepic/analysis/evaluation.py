@@ -7,24 +7,25 @@ import pandas as pd
 from .dataframe import read_predictions, threshold_dictionary
 
 
-def parse_evaluations(evaluations, predictions, thresholds=None,
+def parse_evaluations(evaluations, pred_dir, thresholds=None,
                       empty='unclassifiable', threshold_search=False,
                       search_precision=0.01):
     eval_df, samples = read_evaluations(evaluations)
-    try:
-        predictions = [next(Path(predictions).rglob(f'{sample}.csv'))
-                       for sample in samples]
-    except StopIteration:
-        print('[ERROR] Cannot find prediction files.')
-        raise
+    predictions = []
+    for sample in samples:
+        try:
+            predictions.append(next(Path(pred_dir).rglob(f'{sample}.csv')))
+        except StopIteration:
+            print(f'[ERROR] Cannot find prediction files for {sample}')
+            raise
     if threshold_search:
-        # Initial threshold for the search
+        # Set initial threshold value
         thresholds = 0.0
     elif not thresholds:
         raise ValueError('Thresholds not provided')
     if isinstance(thresholds, (str, Path)):
         thresholds = threshold_dictionary(thresholds)
-    pred_df = read_predictions(predictions, thresholds, empty)
+    pred_df = read_predictions(predictions, thresholds)
     result_df = results_as_df(eval_df, pred_df, empty, thresholds, threshold_search,
                               np.arange(0, 1+search_precision, search_precision))
     if threshold_search:
@@ -37,7 +38,12 @@ def read_evaluations(evaluations):
     if isinstance(evaluations, (str, Path)):
         evaluations = Path(evaluations)
         if evaluations.is_dir():
-            evaluations = list(evaluations.rglob('*.select.csv'))
+            evaluations = list(evaluations.glob('*.select.csv'))
+            if evaluations:
+                print('[INFO] Evaluations are from these files:')
+                print('\t'+'\n\t'.join([str(f) for f in evaluations]))
+            else:
+                raise FileNotFoundError('[ERROR] No evaluation files found')
         else:
             evaluations = [evaluations]
     df_list = []
@@ -57,24 +63,19 @@ def results_as_df(eval_df, pred_df, empty, thres_dict,
                   threshold_search, search_range):
     result_dict = {}
     for idx, row in eval_df.iterrows():
-        prediction, confidence = pred_df.loc[idx, ['prediction', 'confidence']]
+        prediction = pred_df.loc[idx, 'prediction']
+        confidence = pred_df.loc[idx, prediction]
         actual = row['actual']
         if threshold_search:
             threshold_values = search_range
         else:
             # Only one threshold per class, but iterate over it all the same
-            if prediction == empty:
-                # Find the threshold of the best prediction class
-                # in case prediction was set to 'unclassifiable'
-                # This step is kind of repetetive, since predictions
-                # have already been made with these thresholds.
-                prediction = pd.to_numeric(pred_df.loc[idx][2:]).idxmax()
             threshold_values = [thres_dict[prediction]]
         for threshold in threshold_values:
-            # Prediction is initially the class with largest softmax,
-            # since every threshold is initially 0.0.
+            # Prediction is the class with largest softmax,
+            # since every threshold is initially set to 0.0.
             # This means, that some these predictions differ from what
-            # they would be with good thresholds, i.e., possibly more FNs.
+            # they would be with real thresholds, i.e., possibly more FNs.
             if confidence < threshold:
                 prediction = empty
             for name, result in classification_result(prediction, actual, empty):

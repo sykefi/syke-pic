@@ -47,7 +47,8 @@ class PredictionViewer():
     """
 
     def __init__(self, predictions, raw_dir, work_dir='PredictionViewer',
-                 label=False, evaluate=False, thresholds=0.0, keep_images=False):
+                 label=False, evaluate=False, thresholds=0.0, empty='unclassifiable',
+                 keep_images=False):
 
         if label and evaluate:
             raise ValueError('Choose either label or evaluate, not both.')
@@ -74,6 +75,7 @@ class PredictionViewer():
         self.keep_images = keep_images
         self.labeled = {}
         self.moved = []
+        self.empty = empty
 
         if self.select:
             # Update progress or start new
@@ -109,7 +111,7 @@ class PredictionViewer():
                     if p.is_dir():
                         cond_1 = p.name not in self.extra_labels
                         cond_2 = p.name not in self.df.columns[2:]
-                        cond_3 = p.name != 'unclassifiable'
+                        cond_3 = p.name != self.empty
                         if all((cond_1, cond_2, cond_3)):
                             self.extra_labels.append(p.name)
 
@@ -196,8 +198,10 @@ class PredictionViewer():
         if sort_by_class or class_overview:
             # Group data frame by prediction classes
             for name, group in df.sort_values('prediction').groupby('prediction'):
+                if len(group) < 1:
+                    continue
                 group_indeces = group.sort_values(
-                    'confidence', ascending=ascending).index
+                    name, ascending=ascending).index
                 num_preds = len(group_indeces)
                 if class_overview:
                     # Choose random subset of indeces from inside each
@@ -215,7 +219,10 @@ class PredictionViewer():
         else:
             # Sort all predictions by confidence
             if sort_by_confidence:
+                df['confidence'] = df.apply(
+                    lambda row: row[row['prediction']], axis=1)
                 df.sort_values('confidence', ascending=ascending, inplace=True)
+                df.drop('confidence', axis=1, inplace=True)
             # Sort all predictions by roi number (index)
             else:
                 df.sort_index(ascending=ascending, inplace=True)
@@ -264,8 +271,10 @@ class PredictionViewer():
 
     def _new_item(self, roi):
         row = self.df.loc[roi]
-        confidence = row['confidence']
-        probs = row[3:].sort_values(ascending=False)
+        prediction = row['prediction'] if row['classified'] else self.empty
+        confidence = row[row['prediction']]
+        probs = row[2:].sort_values(ascending=False)
+
         if isinstance(self.img_dir, dict):
             # Extract multi-index
             sample, roi_num = roi
@@ -287,34 +296,31 @@ class PredictionViewer():
                 print(f'[INFO] Try deleting {self.work_dir}/images')
                 return
             label = Label(f'{roi} - {confidence:.5f}')
-        options = [''] + \
-            [f'{prob:.5f} - {name}' for name, prob in probs.items()]
-        # Select first non-empty option if confidence is above threshold
-        if confidence >= row['threshold']:
-            current_prediction = options[1]
-        else:
-            current_prediction = options[0]
+
         if self.select:
             if roi in self.labeled:
-                # Set to previous selection
+                # This image has been seen before
                 previous = self.labeled[roi]
-                if previous == 'unclassifiable':
-                    previous = ''
-                else:
-                    for option in options:
-                        if previous in option:
-                            previous = option
-                            break
-                if previous != current_prediction:
+                if previous != prediction:
                     # Previous selection was a correction
                     # Add check mark to distinguish this
                     label.value = '\N{White Heavy Check Mark} ' + label.value
-                    current_prediction = previous
+                    prediction = previous
             else:
-                self.labeled[roi] = current_prediction.split(' - ')[-1]
+                self.labeled[roi] = prediction
+        # Set dropdown selection to empty initially
+        options = ['']
+        predicted_option = ''
+        for name, prob in probs.items():
+            option = f'{prob:.5f} - {name}'
+            options.append(option)
+            if name == prediction:
+                # Set dropdown selection to predicted class
+                predicted_option = option
+
         if self.label:
             options.insert(1, *self.extra_labels)
-        dropdown = Dropdown(options=options, value=current_prediction)
+        dropdown = Dropdown(options=options, value=predicted_option)
         if self.select:
             # Add listener to dropdown menu
             dropdown.observe(self._dropdown_handler(roi), names='value')
@@ -372,7 +378,7 @@ class PredictionViewer():
             display(VBox([dest, buttons]))
 
     def _move_button_handler(self, button):
-        # TODO: Add option to not copy certain classes, such as unclassifiable
+        # TODO: Add option to not copy certain classes, such as empty
         clear_output()
         dest_dir = Path(button.dest.value)
         with open(self.moved_log, 'a') as fh:
@@ -382,9 +388,9 @@ class PredictionViewer():
                 dst = dest_dir/label/f'{self.sample}_{roi}.png'
                 dst.parent.mkdir(parents=True, exist_ok=True)
                 if not label:
-                    label = 'unclassifiable'
+                    label = self.empty
                 else:
-                    # Only move those that are not 'unclassifiable'
+                    # Only move those that are not empty
                     shutil.move(src, dst)
                 fh.write(f'{roi},{label}\n')
                 print(f'[INFO] Moved {roi} to {dst}')
@@ -408,7 +414,7 @@ class PredictionViewer():
         for roi, selection in self.labeled.items():
             if not selection:
                 # Set empty selection to a string
-                selection = 'unclassifiable'
+                selection = self.empty
             data += f"{roi},{selection}\n"
         with open(self.sel_log, 'w') as fh:
             fh.write(data)
