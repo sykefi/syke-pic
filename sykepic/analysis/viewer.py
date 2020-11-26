@@ -140,7 +140,7 @@ class PredictionViewer():
 
     def start(self, per_page=12, sort_by_confidence=True, sort_by_class=False,
               ascending=False, prediction_filter=None, class_overview=False,
-              start_page=1):
+              start_page=1, inverse_filter=False):
         """Start the program
 
         Parameters
@@ -182,7 +182,10 @@ class PredictionViewer():
                 prediction_filter = [prediction_filter]
             for name in prediction_filter:
                 assert name in self.df.columns[2:], f"Unknown class '{name}'"
-            df = self.df[self.df['prediction'].isin(prediction_filter)]
+            if inverse_filter:
+                df = self.df[~self.df['prediction'].isin(prediction_filter)]
+            else:
+                df = self.df[self.df['prediction'].isin(prediction_filter)]
             if len(df) <= 0:
                 print('[INFO] No predictions to show')
                 return
