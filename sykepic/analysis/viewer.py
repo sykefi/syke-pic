@@ -8,12 +8,12 @@ import pandas as pd
 from IPython.display import clear_output, display
 from ipywidgets import Box, Button, Dropdown, Image, Label, Layout, Text, VBox
 
-from .dataframe import read_predictions
+from .classification import read_predictions
 from sykepic.predict import ifcb
 
 
 class PredictionViewer():
-    """Graphical tool for prediction inspection and active labeling.
+    """Graphical tool for inspecting, evaluating and labeling predictions.
 
     This tool is meant to be used in a Jupyter Notebook, since
     it uses IPython and ipywidgets in the background.
@@ -23,27 +23,30 @@ class PredictionViewer():
     predictions : str, Path, list
         Path to csv-file with predictions. You can provide
         more than one prediction file when doing class inspection.
-        Only one file is allowed at a time for active labeling.
+        Only one file is allowed at a time for evaluation and labeling.
     raw_dir : str, Path
         Root directory of raw IFCB data
     work_dir : str, Path
-        Directory used to extract sample images and store labeled
-        images. If left empty, a default directory is created
+        Directory used to extract sample images and store progress files.
+        If left empty, a default directory is created
         in ~/PredictionViewer. Work directory is removed if it
         remains empty after program exits.
     label : bool
         Use viewer to perform active labeling
     evaluate : bool
         Use viewer to evaluate predictions
-    thresholds : str, Path
-        File with classification thresholds for each class
+    thresholds : int, float, str, Path
+        Single value or file with classification thresholds for each class
+    empty : str
+        Name to use for unclassifiable images
     keep_images : bool
         Don't remove extracted images, which is done by default
 
     Methods
     -------
-    start(per_page=9, sort_by_confidence=True, ascending=False,
-          prediction_filter=None, class_inspect=False)
+    start(per_page=12, sort_by_confidence=True, sort_by_class=False,
+          ascending=False, prediction_filter=None, class_overview=False,
+          start_page=1, inverse_prediction_filter=False):
     """
 
     def __init__(self, predictions, raw_dir, work_dir='PredictionViewer',
@@ -140,25 +143,30 @@ class PredictionViewer():
 
     def start(self, per_page=12, sort_by_confidence=True, sort_by_class=False,
               ascending=False, prediction_filter=None, class_overview=False,
-              start_page=1, inverse_filter=False):
+              start_page=1, inverse_prediction_filter=False):
         """Start the program
 
         Parameters
         ----------
         per_page : int
             Number of images to display per page
-        class_inspect : bool
-            Display each prediction class on a separate page.
-            This is useful for inspecting class confidence thresholds.
-            If the number of predictions per class is bigger than
-            `per_page`, a representative sample of them will be selected.
         sort_by_confidence : bool
-            Sort images by prediction confidence (default).
-            If set to False, predictions are ordered by ROI.
+            Sort images by prediction confidence (default)
+        sort_by_class : bool
+            Sort images by classification
         ascending : bool
-            Sort in an ascending order.
+            Sort in an ascending order
         prediction_filter : str, list
             Filter images by prediction (class name)
+        class_overview : bool
+            Display each class on a separate page. If the number of
+            images per class is bigger than `per_page`,
+            a representative sample of them will be selected. This is
+            useful for inspection, but should not be used in evaluation.
+        start_page : int
+            Select at which page to start
+        inverse_prediction_filter : bool
+            Use prediction_filter to exclude classes
         """
 
         # Extract images only if they don't already exist
@@ -182,7 +190,7 @@ class PredictionViewer():
                 prediction_filter = [prediction_filter]
             for name in prediction_filter:
                 assert name in self.df.columns[2:], f"Unknown class '{name}'"
-            if inverse_filter:
+            if inverse_prediction_filter:
                 df = self.df[~self.df['prediction'].isin(prediction_filter)]
             else:
                 df = self.df[self.df['prediction'].isin(prediction_filter)]
