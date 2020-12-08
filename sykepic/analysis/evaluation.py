@@ -4,7 +4,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from .dataframe import read_predictions, threshold_dictionary
+from .classification import read_predictions, threshold_dictionary
 
 
 def parse_evaluations(evaluations, pred_dir, thresholds=None,
