@@ -10,6 +10,31 @@ from .classification import read_predictions, threshold_dictionary
 def parse_evaluations(evaluations, pred_dir, thresholds=None,
                       empty='unclassifiable', threshold_search=False,
                       search_precision=0.01):
+    """Parses evaluation files into various classification measurements.
+
+    Parameters
+    ----------
+    evaluations : str, Path, list of str
+        Path to evaluation files / directory.
+    pred_dir : str, Path
+        Path to prediction-csv directory.
+    thresholds : float, str, Path
+        Single value or file with classification thresholds for each class.
+    empty : str
+        Name used for unclassifiable images in evaluation files.
+    threshold_search : bool
+       Evaluate classifications based on various threshold values.
+    search_precision : float
+        Increment threshold search values by this amount.
+
+    Returns
+    -------
+    pandas.DataFrame
+        Has multi-index composed of class name and threhold value
+        when `threshold_search` is set to True. Has combined scores
+        ('all' row) when `threshold_search` is False.
+    """
+
     eval_df, samples = read_evaluations(evaluations)
     predictions = []
     for sample in samples:
@@ -163,7 +188,9 @@ def F_score(precision, recall, beta=1):
     return (1 + beta**2) * precision * recall / (beta**2 * precision + recall)
 
 
-def best_thresholds(resuls_df, criteria='F1'):
-    g0 = resuls_df.groupby(level=0)
+def best_thresholds(result_df, criteria='F1'):
+    """Select the rows from `result_df` that maximze `criteria`"""
+
+    g0 = result_df.groupby(level=0)
     best_idx = g0.apply(lambda name: name[criteria].idxmax())
-    return resuls_df.loc[best_idx]
+    return result_df.loc[best_idx]
