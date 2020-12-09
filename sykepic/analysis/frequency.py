@@ -3,10 +3,11 @@ from pathlib import Path
 
 import pandas as pd
 
-from sykepic.predict import ifcb
+from .classification import read_predictions
+from sykepic.predict.ifcb import sample_to_datetime
 
 
-def frequency_df(predict_dir, conf_thres=None, start=None, end=None,
+def frequency_df(pred_dir, thresholds=0.0, start=None, end=None,
                  hour_window=None, date_format='%Y-%m-%d %H:%M'):
     """Create a pandas.DataFrame from predictions.
 
@@ -14,10 +15,10 @@ def frequency_df(predict_dir, conf_thres=None, start=None, end=None,
 
     Parameters
     ----------
-    predict_dir : str, Path
+    pred_dir : str, Path
         Root directory of prediction csv-files.
-    conf_thres : float, str, Path
-        Confidence threshold, either as a single float or
+    thresholds : int, float, str, Path
+        Confidence threshold, either as a single value or
         a path to a file with class names and their thresholds.
         Threholds are inclusive, meaning that a prediction is accepted
         if it's confidence value is above or equal to threshold.
@@ -46,15 +47,14 @@ def frequency_df(predict_dir, conf_thres=None, start=None, end=None,
     """
 
     csv_date_list = filter_csv_by_date(
-        predict_dir, start, end, hour_window, date_format)
+        pred_dir, start, end, hour_window, date_format)
     if not csv_date_list:
         print('[INFO] No sample predictions match this time restraint.')
         return
     print(f'[INFO] Using predictions from {len(csv_date_list)} samples')
-    df = csv_to_df(csv_date_list)
-    # TODO: Fix this below. maybe: df[df['confidence'] >= df['threshold']]
-    # if conf_thres:
-    #     df = read_thresholds(df, conf_thres, filter=True)
+    df = csv_to_df(csv_date_list, thresholds)
+    # Filter by valid classifications, and remove 'classified' column
+    df = df[df['classified']].drop('classified', axis=1)
     df = group_predictions(df)
     return df
 
@@ -85,11 +85,11 @@ def filter_df(freq_df, prediction=None, top=None):
     return freq_df
 
 
-def filter_csv_by_date(predict_dir, start=None, end=None, hour_window=None,
+def filter_csv_by_date(pred_dir, start=None, end=None, hour_window=None,
                        date_format='%Y-%m-%d %H:%M'):
-    predict_dir = Path(predict_dir)
-    if not predict_dir.is_dir():
-        raise FileNotFoundError(f"'{predict_dir}' is not a directory")
+    pred_dir = Path(pred_dir)
+    if not pred_dir.is_dir():
+        raise FileNotFoundError(f"'{pred_dir}' is not a directory")
     start = datetime.datetime.strptime(start, date_format) if start else None
     end = datetime.datetime.strptime(end, date_format) if end else None
     if hour_window:
@@ -99,10 +99,8 @@ def filter_csv_by_date(predict_dir, start=None, end=None, hour_window=None,
             hour_start.strip(), time_format)
         hour_end = datetime.datetime.strptime(hour_end.strip(), time_format)
     csv_date_list = []
-    # for csv in list_files(predict_dir, '.csv'):
-    # list_files() doesn't sort results, so must go through all files
-    for csv in sorted(predict_dir.glob('**/*.csv')):
-        date = ifcb.sample_to_datetime(csv.with_suffix('').name)
+    for csv in sorted(pred_dir.glob('**/*.csv')):
+        date = sample_to_datetime(csv.with_suffix('').name)
         if (start and date < start) or (end and date > end):
             continue
         # If using hour_window check that sample's time is in this range
@@ -113,13 +111,14 @@ def filter_csv_by_date(predict_dir, start=None, end=None, hour_window=None,
     return csv_date_list
 
 
-def csv_to_df(csv_date_list):
+def csv_to_df(csv_date_list, thresholds):
     df_list = []
     for csv, date in csv_date_list:
         # Read sample predictions to df, without 'roi'
-        sample_df = pd.read_csv(csv).drop('roi', axis=1)
+        # sample_df = pd.read_csv(csv).drop('roi', axis=1)
         # Insert 'prediction' and 'confidence' columns.
-        insert_prediction(sample_df)
+        # insert_prediction(sample_df)
+        sample_df = read_predictions(csv, thresholds)
         # Drop all class probability columns, since they aren't needed
         sample_df.drop(sample_df.columns[2:], axis=1, inplace=True)
         # Insert 'timestamp' column

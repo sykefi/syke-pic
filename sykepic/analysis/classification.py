@@ -4,33 +4,6 @@ from pathlib import Path
 import pandas as pd
 
 
-def insert_threshold(df, threshold, filter=False):
-    if not isinstance(threshold, (float, str, Path)):
-        raise ValueError('Threshold can be either float, list, or Path')
-    if isinstance(threshold, float):
-        # Add default threshold to each row
-        df.insert(2, 'threshold', threshold)
-    else:
-        # Read threshold values from a whitespace separated file
-        conf_df = pd.read_csv(threshold, header=None,
-                              index_col=0, delim_whitespace=True)
-        classes = df.prediction.cat.categories
-        # If default value is not given,
-        # make sure all classes are given a threshold value
-        if (conf_df.index[0] != 'default' or
-                pd.isnull(conf_df.loc['default'].item())):
-            assert (classes.isin(conf_df.index).all() and
-                    conf_df.notnull().values.all()), \
-                'Make sure to provide default confidence threshold'
-        # Add any missing classes
-        conf_df = conf_df.reindex(conf_df.index.append(
-            classes[~classes.isin(conf_df.index)]))
-        # Fill missing values with default threshold
-        conf_df = conf_df.fillna(conf_df.iloc[0])
-        # Add class threshold to each row of main df
-        df.insert(2, 'threshold', conf_df.loc[df['prediction'], 1].tolist())
-
-
 def threshold_dictionary(thresholds, default=None):
     thres_dict = {}
     with open(thresholds) as fh:
@@ -75,8 +48,8 @@ def make_classification(row, thresholds):
 
 def insert_classifications(df, thresholds):
     """This function modifies `df` in place"""
-    preds, status = zip(*df.apply(make_classification, axis=1,
-                                  args=(thresholds,)))
+    preds, status = zip(
+            *df.apply(make_classification, axis=1, args=(thresholds,)))
     df.insert(0, 'prediction', preds)
     df['prediction'] = df['prediction'].astype('category')
     df.insert(1, 'classified', status)
