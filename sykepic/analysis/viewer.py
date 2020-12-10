@@ -35,7 +35,7 @@ class PredictionViewer():
         Use viewer to perform active labeling
     evaluate : bool
         Use viewer to evaluate predictions
-    thresholds : int, float, str, Path
+    thresholds : float, str, Path
         Single value or file with classification thresholds for each class
     empty : str
         Name to use for unclassifiable images
@@ -45,13 +45,13 @@ class PredictionViewer():
     Methods
     -------
     start(per_page=12, sort_by_confidence=True, sort_by_class=False,
-          ascending=False, prediction_filter=None, class_overview=False,
-          start_page=1, inverse_prediction_filter=False):
+          ascending=False, class_overview=False, prediction_filter=None,
+          inverse_prediction_filter=True, start_page=1):
     """
 
     def __init__(self, predictions, raw_dir, work_dir='PredictionViewer',
-                 label=False, evaluate=False, thresholds=0.0, empty='unclassifiable',
-                 keep_images=False):
+                 label=False, evaluate=False, thresholds=0.0,
+                 empty='unclassifiable', keep_images=False):
 
         if label and evaluate:
             raise ValueError('Choose either label or evaluate, not both.')
@@ -87,7 +87,7 @@ class PredictionViewer():
             else:
                 self.sel_dir = self.work_dir/'label'
             self.sel_log = self.sel_dir/f'{self.sample}.select.csv'
-            self.moved_log = self.sel_dir/f'{self.sample}.moved.csv'
+            self.moved_log = self.sel_dir/f'{self.sample}.copied.csv'
             if self.label and self.moved_log.is_file():
                 with open(self.moved_log) as fh:
                     for i, line in enumerate(fh, start=1):
@@ -142,8 +142,8 @@ class PredictionViewer():
         )
 
     def start(self, per_page=12, sort_by_confidence=True, sort_by_class=False,
-              ascending=False, prediction_filter=None, class_overview=False,
-              start_page=1, inverse_prediction_filter=False):
+              ascending=False, class_overview=False, prediction_filter=None,
+              inverse_prediction_filter=True, start_page=1):
         """Start the program
 
         Parameters
@@ -156,17 +156,17 @@ class PredictionViewer():
             Sort images by classification
         ascending : bool
             Sort in an ascending order
-        prediction_filter : str, list
-            Filter images by prediction (class name)
         class_overview : bool
             Display each class on a separate page. If the number of
             images per class is bigger than `per_page`,
             a representative sample of them will be selected. This is
             useful for inspection, but should not be used in evaluation.
-        start_page : int
-            Select at which page to start
+        prediction_filter : str, list
+            Filter images by prediction (class name)
         inverse_prediction_filter : bool
             Use prediction_filter to exclude classes
+        start_page : int
+            Select at which page to start
         """
 
         # Extract images only if they don't already exist
@@ -370,12 +370,14 @@ class PredictionViewer():
             self._cleanup()
             return
         if self.label:
-            print(f'[INFO] Total labeled images: {len(self.labeled)}')
+            num_labeled = len([name for name in self.labeled.values()
+                               if name != self.empty])
+            print(f'[INFO] Total labeled images: {num_labeled}')
             dest = Text(value=str(self.sel_dir),
-                        description='Move to:',
+                        description='Copy to:',
                         tooltip='Each label gets a sub-directory automatically')
             move_btn = Button(description='Accept', button_style='success',
-                              tooltip='Move labeled images and exit')
+                              tooltip='Copy labeled images and exit')
             move_btn.dest = dest
             move_btn.on_click(self._move_button_handler)
             back_btn = Button(description='Back', button_style='info',
@@ -389,23 +391,19 @@ class PredictionViewer():
             display(VBox([dest, buttons]))
 
     def _move_button_handler(self, button):
-        # TODO: Add option to not copy certain classes, such as empty
         clear_output()
         dest_dir = Path(button.dest.value)
         with open(self.moved_log, 'a') as fh:
             for roi, label in self.labeled.items():
-                label = label.split(' - ')[-1]
+                if not label or label == self.empty:
+                    # Don't copy unlabeled images
+                    continue
                 src = self.img_dir/f'{roi}.png'
                 dst = dest_dir/label/f'{self.sample}_{roi}.png'
                 dst.parent.mkdir(parents=True, exist_ok=True)
-                if not label:
-                    label = self.empty
-                else:
-                    # Only move those that are not empty
-                    shutil.move(src, dst)
+                shutil.copy(src, dst)
                 fh.write(f'{roi},{label}\n')
-                print(f'[INFO] Moved {roi} to {dst}')
-                # In case user wants to start again
+                print(f'[INFO] Copied {roi} to {dst}')
                 self.moved.append(roi)
         self.labeled = {}
         self.sel_log.unlink()

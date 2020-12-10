@@ -8,8 +8,8 @@ from .classification import read_predictions, threshold_dictionary
 
 
 def parse_evaluations(evaluations, pred_dir, thresholds=None,
-                      empty='unclassifiable', threshold_search=False,
-                      search_precision=0.01):
+                      threshold_search=False, search_precision=0.01,
+                      empty='unclassifiable'):
     """Parses evaluation files into various classification measurements.
 
     Parameters
@@ -20,12 +20,12 @@ def parse_evaluations(evaluations, pred_dir, thresholds=None,
         Path to prediction-csv directory.
     thresholds : float, str, Path
         Single value or file with classification thresholds for each class.
-    empty : str
-        Name used for unclassifiable images in evaluation files.
     threshold_search : bool
        Evaluate classifications based on various threshold values.
     search_precision : float
         Increment threshold search values by this amount.
+    empty : str
+        Name used for unclassifiable images in evaluation files.
 
     Returns
     -------
