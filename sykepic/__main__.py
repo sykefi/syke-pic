@@ -117,6 +117,10 @@ def main():
         help='Allas path that will be cleared of synched and archived files'
     )
     sync_parser.add_argument(
+        '--keep', type=int, default=0, metavar='DAYS',
+        help="Don't remove files younger than this amount (in days)"
+    )
+    sync_parser.add_argument(
         '-f', '--force', action='store_true',
         help='Force archive creation and upload'
     )
