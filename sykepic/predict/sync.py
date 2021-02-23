@@ -3,6 +3,7 @@
 import datetime
 import shutil
 import zipfile
+from argparse import ArgumentTypeError
 from sys import stderr
 from pathlib import Path
 
@@ -15,8 +16,10 @@ from . import ifcb
 def main(args):
     if args.upload:
         upload(args)
-    else:
+    elif args.download:
         download(args)
+    else:
+        remove(args)
 
 
 def download(args):
@@ -44,7 +47,6 @@ def upload(args):
     local = Path(args.local)
     s3 = boto3.resource('s3', endpoint_url='https://a3s.fi')
     today = datetime.date.today()
-    # today = datetime.date(2018, 7, 4)
     # Find all directories corresponding to one day
     day_dirs = []
     # find_head_dirs() modifies day_dirs in place
@@ -74,24 +76,49 @@ def upload(args):
                     zipped_files.append(file)
         print(f'[INFO] Uploading to {allas_zip.parent}')
         allas.upload(local_zip, allas_zip, s3)
-        # Removing local copies
-        if (date - today).days() > args.keep:
-            if args.remove:
-                shutil.rmtree(day_dir)
-                print(f'[INFO] Removed {day_dir}')
-                if args.remove > 1:
-                    # Remove local zip file
-                    local_zip.unlink()
-                    # Remove month directory if it's empty
-                    try:
-                        day_dir.parent.rmdir()
-                    except OSError:
-                        pass
-                    print(f'[INFO] Removed {local_zip}')
-            if args.clean_allas:
-                print(f'[INFO] Cleaning {args.clean_allas} in Allas')
-                for file in zipped_files:
-                    allas.delete(f'{args.clean_allas}/{file.name}', s3)
+
+
+def remove(args):
+    if len(args.remove) > 3:
+        raise ArgumentTypeError('--remove takes max three arguments')
+    files_to_remove_from_allas = []
+    today = datetime.date.today()
+    # Find all directories corresponding to one day
+    day_dirs = []
+    # find_head_dirs() modifies day_dirs in place
+    find_head_dirs(Path(args.local), day_dirs)
+    for day_dir in day_dirs:
+        try:
+            year, month, day = day_dir.parts[-3:]
+            date = datetime.date(int(year), int(month), int(day))
+        except Exception:
+            print(
+                f'[ERROR] {day_dir} is not a valid day directory', file=stderr)
+            continue
+        if (today - date).days < args.keep:
+            continue
+        files_to_remove_from_allas.extend(list(day_dir.iterdir()))
+        if 'file' in args.remove:
+            shutil.rmtree(day_dir)
+            print(f'[INFO] Removed {day_dir}')
+        if 'archive' in args.remove:
+            # Remove local zip file
+            local_zip = day_dir.with_suffix('.zip')
+            if local_zip.is_file():
+                local_zip.unlink()
+            # Remove month directory if it's empty
+            try:
+                day_dir.parent.rmdir()
+            except OSError:
+                pass
+            print(f'[INFO] Removed {local_zip}')
+    if 'allas' in args.remove:
+        # Remove files from Allas
+        s3 = boto3.resource('s3', endpoint_url='https://a3s.fi')
+        print(f'[INFO] Cleaning Allas bucket {args.allas}')
+        for file in files_to_remove_from_allas:
+            allas.delete(f'{args.allas}/{file.name}', s3)
+    print('[INFO] Done!')
 
 
 def find_head_dirs(path, head_dirs=[]):

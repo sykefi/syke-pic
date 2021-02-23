@@ -108,13 +108,9 @@ def main():
         '-u', '--upload', action='store_true',
         help='Archive and upload local data to Allas'
     )
-    sync_parser.add_argument(
-        '-r', '--remove', action='count',
-        help='Remove local directory (-r), remove local archive as well (-rr)'
-    )
-    sync_parser.add_argument(
-        '--clean-allas', metavar='PATH',
-        help='Allas path that will be cleared of synched and archived files'
+    sync_action.add_argument(
+        '-r', '--remove', action='store', type=str, nargs='+',
+        help='Options: file, archive, allas'
     )
     sync_parser.add_argument(
         '--keep', type=int, default=0, metavar='DAYS',
