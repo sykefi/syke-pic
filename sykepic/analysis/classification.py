@@ -74,5 +74,6 @@ def read_predictions(predictions, thresholds=0.0):
     if isinstance(thresholds, (str, Path)):
         thresholds = threshold_dictionary(thresholds)
     # Insert 'prediction' and 'classified' columns to dataframe
-    insert_classifications(df, thresholds)
+    if not df.empty:
+        insert_classifications(df, thresholds)
     return df
