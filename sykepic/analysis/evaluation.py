@@ -9,7 +9,7 @@ from .classification import read_predictions, threshold_dictionary
 
 def parse_evaluations(evaluations, pred_dir, thresholds=None,
                       threshold_search=False, search_precision=0.01,
-                      empty='unclassifiable'):
+                      empty='unclassifiable', unsure='unsure'):
     """Parses evaluation files into various classification measurements.
 
     Parameters
@@ -51,8 +51,10 @@ def parse_evaluations(evaluations, pred_dir, thresholds=None,
     if isinstance(thresholds, (str, Path)):
         thresholds = threshold_dictionary(thresholds)
     pred_df = read_predictions(predictions, thresholds)
-    result_df = results_as_df(eval_df, pred_df, empty, thresholds, threshold_search,
-                              np.arange(0, 1+search_precision, search_precision))
+    search_range = np.arange(0, 1+search_precision, search_precision)
+    result_df = results_as_df(eval_df, pred_df, thresholds,
+                              threshold_search, search_range,
+                              empty, unsure)
     if threshold_search:
         # No specificity without 'all' class
         result_df.drop('specificity', axis=1, inplace=True)
@@ -84,13 +86,16 @@ def read_evaluations(evaluations):
     return df, samples
 
 
-def results_as_df(eval_df, pred_df, empty, thres_dict,
-                  threshold_search, search_range):
+def results_as_df(eval_df, pred_df, thres_dict, threshold_search,
+                  search_range, empty, unsure):
     result_dict = {}
     for idx, row in eval_df.iterrows():
         prediction = pred_df.loc[idx, 'prediction']
         confidence = pred_df.loc[idx, prediction]
         actual = row['actual']
+        if actual == unsure:
+            # Skip unsure images
+            continue
         if threshold_search:
             threshold_values = search_range
         else:

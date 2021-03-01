@@ -50,8 +50,8 @@ class PredictionViewer():
     """
 
     def __init__(self, predictions, raw_dir, work_dir='PredictionViewer',
-                 label=False, evaluate=False, thresholds=0.0,
-                 empty='unclassifiable', keep_images=False):
+                 thresholds=0.0, label=False, evaluate=False,
+                 empty='unclassifiable', unsure='unsure', keep_images=False):
 
         if label and evaluate:
             raise ValueError('Choose either label or evaluate, not both.')
@@ -79,11 +79,14 @@ class PredictionViewer():
         self.labeled = {}
         self.moved = []
         self.empty = empty
+        self.unsure = unsure
+        self.extra_labels = []
 
         if self.select:
             # Update progress or start new
             if self.evaluate:
                 self.sel_dir = self.work_dir/'evaluate'
+                self.extra_labels.append('unsure')
             else:
                 self.sel_dir = self.work_dir/'label'
             self.sel_log = self.sel_dir/f'{self.sample}.select.csv'
@@ -108,7 +111,7 @@ class PredictionViewer():
                     f"[INFO] Creating a new progress file in '{self.sel_log}'")
                 Path.mkdir(self.sel_dir, parents=True, exist_ok=True)
             if self.label:
-                self.extra_labels = ['New_Class']
+                self.extra_labels.append('New_Class')
                 # Add any novel class labels found in work_dir
                 for p in self.sel_dir.iterdir():
                     if p.is_dir():
@@ -143,7 +146,7 @@ class PredictionViewer():
 
     def start(self, per_page=12, sort_by_confidence=True, sort_by_class=False,
               ascending=False, class_overview=False, prediction_filter=None,
-              inverse_prediction_filter=True, start_page=1):
+              inverse_prediction_filter=True, unsure_only=False, start_page=1):
         """Start the program
 
         Parameters
@@ -204,6 +207,15 @@ class PredictionViewer():
             # Don't show previously labeled and moved images
             df = df.drop(self.moved)
 
+        if self.evaluate and unsure_only:
+            # Only show images labeled 'unsure'
+            unsure_roi = [roi for roi, label in self.labeled.items()
+                          if label == self.unsure]
+            df = df[df.index.isin(unsure_roi)]
+            if len(df) <= 0:
+                print('[INFO] No predictions to show')
+                return
+
         # Divide predictions to pages
         self.pages = []
         if sort_by_class or class_overview:
@@ -254,10 +266,7 @@ class PredictionViewer():
             self.pages)-1 else False
         back_disabled = True if self.current_page == 0 else False
         unlabeled = self.pages[self.current_page]
-        items = []
-        for roi in unlabeled:
-            item = self._new_item(roi)
-            items.append(item)
+        items = [self._new_item(roi) for roi in unlabeled]
         next_btn = Button(description='>', button_style='info',
                           disabled=next_disabled, tooltip='Show next page')
         next_btn.on_click(self._next_button_handler)
@@ -321,15 +330,14 @@ class PredictionViewer():
                 self.labeled[roi] = prediction
         # Set dropdown selection to empty initially
         options = ['']
-        predicted_option = ''
+        predicted_option = '' if prediction != self.unsure else self.unsure
         for name, prob in probs.items():
             option = f'{prob:.5f} - {name}'
             options.append(option)
             if name == prediction:
                 # Set dropdown selection to predicted class
                 predicted_option = option
-
-        if self.label:
+        if self.extra_labels:
             options.insert(1, *self.extra_labels)
         dropdown = Dropdown(options=options, value=predicted_option)
         if self.select:
