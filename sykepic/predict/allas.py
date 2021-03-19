@@ -1,13 +1,16 @@
 """Helper functions for accessing Allas."""
 
 from pathlib import Path
+from requests import HTTPError
 
 import boto3
+
+ENDPOINT_URL = 'https://a3s.fi'
 
 
 def delete(path, s3=None):
     if not s3:
-        s3 = boto3.resource('s3', endpoint_url='https://a3s.fi')
+        s3 = boto3.resource('s3', endpoint_url=ENDPOINT_URL)
     bucket, *target = Path(path).parts
     bucket = s3.Bucket(bucket)
     target = '/'.join(target)
@@ -15,9 +18,22 @@ def delete(path, s3=None):
     target.delete()
 
 
+def delete_many(bucket, files, s3=None):
+    if not s3:
+        s3 = boto3.resource('s3', endpoint_url=ENDPOINT_URL)
+    # bucket = Path(bucket).parts[0]
+    bucket = s3.Bucket(bucket)
+    response = bucket.delete_objects(
+        {'Objects': [{'Key': key} for key in files]})
+    status_code = response['ResponseMetadata']['HTTPStatusCode']
+    if status_code != 200:
+        raise HTTPError(f's3 client returned status code {status_code}')
+    # Apparently there is no way to confirm which objects were actually deleted
+
+
 def download(path, dest_dir, s3=None):
     if not s3:
-        s3 = boto3.resource('s3', endpoint_url='https://a3s.fi')
+        s3 = boto3.resource('s3', endpoint_url=ENDPOINT_URL)
     bucket, *target = Path(path).parts
     bucket = s3.Bucket(bucket)
     target = '/'.join(target)
@@ -28,7 +44,7 @@ def download(path, dest_dir, s3=None):
 
 def ls(path, extension=None, s3=None):
     if not s3:
-        s3 = boto3.resource('s3', endpoint_url='https://a3s.fi')
+        s3 = boto3.resource('s3', endpoint_url=ENDPOINT_URL)
     if isinstance(extension, str):
         extension = [extension]
     bucket, *sub_dir = Path(path).parts
@@ -49,7 +65,7 @@ def ls(path, extension=None, s3=None):
 
 def upload(src, path, s3=None):
     if not s3:
-        s3 = boto3.resource('s3', endpoint_url='https://a3s.fi')
+        s3 = boto3.resource('s3', endpoint_url=ENDPOINT_URL)
     bucket, *sub_path = Path(path).parts
     bucket = s3.Bucket(bucket)
     dest = '/'.join(sub_path)

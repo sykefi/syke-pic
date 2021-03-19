@@ -23,7 +23,7 @@ def main(args):
 
 
 def download(args):
-    s3 = boto3.resource('s3', endpoint_url='https://a3s.fi')
+    s3 = boto3.resource('s3', endpoint_url=allas.ENDPOINT_URL)
     num_downloads = 0
     for file in list(allas.ls(args.allas, s3=s3)):
         date = ifcb.sample_to_datetime(file)
@@ -45,7 +45,7 @@ def download(args):
 
 def upload(args):
     local = Path(args.local)
-    s3 = boto3.resource('s3', endpoint_url='https://a3s.fi')
+    s3 = boto3.resource('s3', endpoint_url=allas.ENDPOINT_URL)
     today = datetime.date.today()
     # Find all directories corresponding to one day
     day_dirs = []
@@ -114,10 +114,9 @@ def remove(args):
             print(f'[INFO] Removed {local_zip}')
     if 'allas' in args.remove:
         # Remove files from Allas
-        s3 = boto3.resource('s3', endpoint_url='https://a3s.fi')
+        s3 = boto3.resource('s3', endpoint_url=allas.ENDPOINT_URL)
         print(f'[INFO] Cleaning Allas bucket {args.allas}')
-        for file in files_to_remove_from_allas:
-            allas.delete(f'{args.allas}/{file.name}', s3)
+        allas.delete_many(args.allas, files_to_remove_from_allas, s3)
     print('[INFO] Done!')
 
 
