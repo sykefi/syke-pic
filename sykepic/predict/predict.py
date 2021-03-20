@@ -1,5 +1,6 @@
 """This module contains the main logic for model inference."""
 
+import logging
 import shutil
 from configparser import ConfigParser
 from pathlib import Path
@@ -12,9 +13,11 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 from . import allas
-from . import ifcb
+from sykepic.utils import ifcb
 from sykepic.train.config import get_img_shape, get_transforms, get_network
 from sykepic.train.data import ImageDataset
+
+log = logging.getLogger('predict')
 
 
 def main(args):
@@ -22,63 +25,25 @@ def main(args):
         args.softmax_exp = None
     else:
         args.softmax_exp = float(args.softmax_exp)
-    if args.allas:
-        allas_setup(args)
-    else:
-        predict(args.model, args.raw, args.out, args.batch_size,
-                args.num_workers, args.softmax_exp, args.limit, args.force)
+    predict(args.model, args.raw, args.out, args.batch_size,
+            args.num_workers, args.softmax_exp, args.limit, args.force)
 
 
-def allas_setup(args):
-    raw_root = Path(args.raw)
-    out_root = Path(args.out)
-    s3 = boto3.resource('s3', endpoint_url='https://a3s.fi')
+def predict(model, raw_dir, out_dir, batch_size, num_workers, sample_filter=None,
+            softmax_exp=None, limit=None, force=False, progress_bar=True):
+    # Find all samples from raw_dir, optionally filter them by name (sync)
     samples = []
-    for allas_adc in list(allas.ls(args.allas, '.adc', s3)):
-        sample = Path(allas_adc).with_suffix('').name
-        date = ifcb.sample_to_datetime(sample)
-        day_path = date.strftime('%Y/%m/%d')
-        csv = (out_root/day_path/sample).with_suffix('.csv')
-        if csv.is_file() and not args.force:
-            # print(f'[INFO] {sample} already analysed')
+    for adc in sorted(Path(raw_dir).glob('**/*.adc')):
+        sample = adc.with_suffix('').name
+        if sample_filter and sample not in sample_filter:
             continue
-        sample_dir = raw_root/day_path
-        adc = (sample_dir/sample).with_suffix('.adc')
-        if not adc.is_file():
-            if not sample_dir.is_dir():
-                sample_dir.mkdir(parents=True)
-            try:
-                for ext in ('.adc', '.hdr', '.roi'):
-                    file = (Path(args.allas)/sample).with_suffix(ext)
-                    print(f'[INFO] Downloading {file}')
-                    allas.download(file, sample_dir, s3)
-            except Exception as e:
-                print(f'[ERROR] {sample}: {e}')
-                # Remove all raw files, so sample can be tried again later
-                for ext in ('.adc', '.hdr', '.roi'):
-                    (sample_dir/sample).with_suffix(ext).unlink(missing_ok=True)
-                continue
+        sample_date = ifcb.sample_to_datetime(sample)
+        day_path = sample_date.strftime('%Y/%m/%d')
+        csv = Path(out_dir)/day_path/(adc.with_suffix('.csv').name)
         samples.append((adc, csv))
-    if samples:
-        # print(f'[INFO] Predicting {len(samples)} samples')
-        predict(args.model, samples, None, args.batch_size, args.num_workers,
-                args.softmax_exp, args.limit, args.force)
 
-
-def predict(model, raw, out_root, batch_size, num_workers,
-            softmax_exp=None, limit=None, force=False):
-    if isinstance(raw, (str, Path)):
-        # main called from __name__
-        samples = []
-        for adc in sorted(Path(raw).glob('**/*.adc')):
-            # sample = adc.with_suffix('').name
-            date = ifcb.sample_to_datetime(adc.name)
-            day_path = date.strftime('%Y/%m/%d')
-            csv = Path(out_root)/day_path/(adc.with_suffix('.csv').name)
-            samples.append((adc, csv))
-    else:
-        # main called from allas_predict
-        samples = raw
+    if not samples:
+        log.error('No samples to predict')
 
     # Prepare model
     model = Path(model)
@@ -95,13 +60,23 @@ def predict(model, raw, out_root, batch_size, num_workers,
         model/'best_state.pth', map_location=device))
 
     # Choose a subset of samples based if limit is provided
-    if limit and limit > 0:
+    if limit and limit > 0 and len(samples) > limit:
         idxs = np.linspace(0, len(samples)-1, num=limit, dtype=int)
         samples = [samples[i] for i in idxs]
 
-    for adc, csv in tqdm(samples, desc='Prediction progress'):
+    # Optionally hide tqdm progress bar
+    iterator = (tqdm(samples, desc='Prediction progress')
+                if progress_bar else samples)
+
+    predicted_samples = set()
+    # Start prediction process
+    for adc, csv in iterator:
+        sample = adc.with_suffix('').name
+        log.debug(f'Predicting {sample}')
         if not force and csv.is_file():
-            print(f'[ERROR] {csv} already exists, -f [--force] to overwrite')
+            log.error(
+                f"{csv.name} already exists, skipping")
+            predicted_samples.add(sample)
             continue
         img_dir = f"{csv.with_suffix('')}_images"
         roi = adc.with_suffix('.roi')
@@ -109,7 +84,8 @@ def predict(model, raw, out_root, batch_size, num_workers,
             try:
                 ifcb.raw_to_png(adc, roi, out_dir=img_dir)
             except FileExistsError:
-                print('[ERROR] Images already extracted')
+                log.error(
+                    f"Images already extracted for '{sample}'")
             img_paths = sorted(Path(img_dir).glob('**/*.png'))
             dataset = ImageDataset(img_paths, transform=eval_transform,
                                    num_chans=img_shape[0])
@@ -124,11 +100,14 @@ def predict(model, raw, out_root, batch_size, num_workers,
                     data += f'\n{roi},'
                     data += ','.join(f'{p:.5f}' for p in probs)
                 fh.write(data)
-        except Exception:
+        except:
+            log.exception("While predicting '{sample}'")
             raise
         finally:
-            # Remove extracted images
+            # Remove extracted images even in case of exception
             shutil.rmtree(img_dir)
+        predicted_samples.add(sample)
+    return predicted_samples
 
 
 def make_predictions(net, dataloader, classes, softmax_exp=None, device='cpu'):

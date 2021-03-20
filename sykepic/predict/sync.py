@@ -1,46 +1,134 @@
 """Module for synchronising local data with Allas"""
 
 import datetime
+import logging
 import shutil
 import zipfile
 from argparse import ArgumentTypeError
-from sys import stderr
+from configparser import ConfigParser
 from pathlib import Path
+from time import sleep
 
 import boto3
+from botocore.exceptions import ClientError
+from sykepic.utils import ifcb, logger
 
 from . import allas
-from . import ifcb
+from .predict import predict
+
+log = logging.getLogger('sync')
 
 
 def main(args):
-    if args.upload:
-        upload(args)
-    elif args.download:
-        download(args)
-    else:
-        remove(args)
-
-
-def download(args):
+    # Parse config file and set up
+    config = ConfigParser()
+    config.read(args.config)
+    logger.setup(config['logging']['config'])
     s3 = boto3.resource('s3', endpoint_url=allas.ENDPOINT_URL)
-    num_downloads = 0
-    for file in list(allas.ls(args.allas, s3=s3)):
-        date = ifcb.sample_to_datetime(file)
-        day_path = date.strftime('%Y/%m/%d')
-        save_dir = Path(args.local)/day_path
-        # Check if file has already been downloaded
-        if (save_dir/file).is_file() or save_dir.with_suffix('.zip').is_file():
-            continue
-        if not save_dir.is_dir():
-            save_dir.mkdir(parents=True)
+    record = read_record(config['local']['sample_record'])
+    error_record = read_record(config['local']['error_record'])
+    sample_extensions = tuple(ext.strip() for ext in config.get(
+        'download', 'sample_extensions').split(','))
+    download_bucket = s3.Bucket(config['download']['bucket'])
+    # upload_bucket = s3.Bucket(config['upload']['bucket'])
+    local_raw = Path(config['local']['raw'])
+    local_raw.mkdir(parents=True, exist_ok=True)
+    local_pred = Path(config['local']['predictions'])
+    local_pred.mkdir(parents=True, exist_ok=True)
+    model_dir = Path(config['predict']['model'])
+    if not model_dir.is_dir():
+        raise OSError(f"Model directory '{model_dir} not found'")
+    batch_size = config.getint('predict', 'batch_size')
+    num_workers = config.getint('predict', 'num_workers')
+    limit = config['predict']['limit']
+    limit = int(limit) if limit else None
+
+    # Start service loop
+    try:
+        while True:
+            samples_available = check_for_new(
+                sample_extensions, record, error_record, download_bucket)
+            if not samples_available:
+                sleep(60)
+                continue
+            log.info(f'{len(samples_available)} samples available')
+            samples_downloaded = download(
+                samples_available, sample_extensions, local_raw, download_bucket)
+            log.info(f'{len(samples_downloaded)} new samples downloaded')
+            error_record.update(
+                samples_available.difference(samples_downloaded))
+            if not samples_downloaded:
+                sleep(60)
+                continue
+            log.info('Calling prediction module...')
+            # record.update(samples_downloaded)  # Local debug purposes
+            samples_processed = predict(model_dir, local_raw, local_pred,
+                                        batch_size, num_workers,
+                                        sample_filter=samples_downloaded, limit=limit,
+                                        progress_bar=False)
+            log.info(
+                f'{len(samples_processed)} new samples processed successfully')
+            record.update(samples_processed)
+            write_record(record, config['local']['sample_record'])
+            write_record(error_record, config['local']['error_record'])
+    except:
+        log.critical('Unhandled exception in service loop', exc_info=True)
+
+
+def check_for_new(extensions, record, error_record, bucket):
+    log.info('Checking for new samples...')
+    # Iterate over object keys in the given bucket, filtering out those that
+    # don't end with the correct extensions. Next remove the extensions from
+    # the key and add them to a set, which will keep only one name per sample.
+    samples = set(
+        obj.key.split('.')[0] for obj in bucket.objects.all()
+        if obj.key.endswith(extensions))
+    # Taking a set difference with the 'record', will return those
+    # keys that are in 'samples' but not in 'record'.
+    new_samples = samples.difference(record, error_record)
+    return new_samples
+
+
+def download(samples, extensions, local_raw, bucket):
+    log.info('Downloading new samples...')
+    downloaded_samples = set()
+    for sample in samples:
+        sample_date = ifcb.sample_to_datetime(sample)
+        day_path = sample_date.strftime('%Y/%m/%d')
+        to = local_raw/day_path
+        to.mkdir(exist_ok=True, parents=True)
+        log.debug(f'Downloading {sample}')
         try:
-            num_downloads += 1
-            allas.download(Path(args.allas)/file, save_dir, s3)
-        except Exception as e:
-            print(f'[ERROR] {file}: {e}', file=stderr)
-            continue
-    print(f'[INFO] Downloaded {num_downloads} new files')
+            for ext in extensions:
+                obj = sample + ext
+                if not (to/obj).is_file():
+                    bucket.download_file(obj, str(to/obj))
+            downloaded_samples.add(sample)
+        except ClientError as e:
+            status_code = e.response['ResponseMetadata']['HTTPStatusCode']
+            if status_code == 404:
+                log.error(f"Object '{obj}' not found in '{bucket.name}'")
+            else:
+                log.exception(f"While downloading object '{obj}'")
+                raise
+    return downloaded_samples
+
+
+def read_record(file):
+    Path(file).touch(exist_ok=True)
+    with open(file) as fh:
+        record = set(fh.read().split('\n'))
+        # Remove last empty line if it exists in record
+        if '' in record:
+            record.remove('')
+    return record
+
+
+def write_record(record, file):
+    log.info(f'Writing record ({len(record)} in total)')
+    with open(file, 'w') as fh:
+        for sample in record:
+            fh.write(sample + '\n')
 
 
 def upload(args):
@@ -56,8 +144,7 @@ def upload(args):
             year, month, day = day_dir.parts[-3:]
             date = datetime.date(int(year), int(month), int(day))
         except Exception:
-            print(
-                f'[ERROR] {day_dir} is not a valid day directory', file=stderr)
+            print(f'[ERROR] {day_dir} is not a valid day directory')
             continue
         # Only upload past day's data
         if date >= today:
@@ -93,7 +180,7 @@ def remove(args):
             date = datetime.date(int(year), int(month), int(day))
         except Exception:
             print(
-                f'[ERROR] {day_dir} is not a valid day directory', file=stderr)
+                f'[ERROR] {day_dir} is not a valid day directory')
             continue
         if (today - date).days < args.keep:
             continue
