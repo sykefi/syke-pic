@@ -1,17 +1,18 @@
 """Module for synchronising local data with Allas"""
 
-import datetime
 import logging
 import shutil
-import zipfile
 from argparse import ArgumentTypeError
 from configparser import ConfigParser
+from datetime import datetime, timedelta
 from pathlib import Path
 from time import sleep
 
 import boto3
 from botocore.exceptions import ClientError
+from requests import HTTPError
 from sykepic.utils import ifcb, logger
+from sykepic.utils.files import create_archive
 
 from . import allas
 from .predict import predict
@@ -30,7 +31,6 @@ def main(args):
     sample_extensions = tuple(ext.strip() for ext in config.get(
         'download', 'sample_extensions').split(','))
     download_bucket = s3.Bucket(config['download']['bucket'])
-    # upload_bucket = s3.Bucket(config['upload']['bucket'])
     local_raw = Path(config['local']['raw'])
     local_raw.mkdir(parents=True, exist_ok=True)
     local_pred = Path(config['local']['predictions'])
@@ -42,55 +42,89 @@ def main(args):
     num_workers = config.getint('predict', 'num_workers')
     limit = config['predict']['limit']
     limit = int(limit) if limit else None
+    upload_time = datetime.strptime(config['upload']['time'], '%H:%M')
+    next_upload = datetime.now().replace(
+        hour=upload_time.hour, minute=upload_time.minute, second=0, microsecond=0)
+    upload_record = read_record(config['local']['upload_record'])
+    upload_bucket = s3.Bucket(config['upload']['bucket'])
+    raw_prefix = config['upload']['raw_prefix']
+    pred_prefix = config['upload']['predictions_prefix']
+    compression = config['upload']['compression']
+    remove_raw_files = config.getboolean('remove', 'raw_files')
+    remove_pred_files = config.getboolean('remove', 'prediction_files')
+    remove_raw_archive = config.getboolean('remove', 'raw_archive')
+    remove_pred_archive = config.getboolean('remove', 'prediction_archive')
+    remove_from_bucket = config.getboolean('remove', 'from_download_bucket')
+    keep = config.getint('remove', 'keep')
 
     # Start service loop
+    log.info('Synchronization service started')
     try:
         while True:
-            samples_available = check_for_new(
+            samples_available = check_available(
                 sample_extensions, record, error_record, download_bucket)
-            if not samples_available:
+            log.debug(f'{len(samples_available)} samples available')
+            if samples_available:
+                samples_downloaded = download(
+                    samples_available, sample_extensions, local_raw, download_bucket)
+                log.debug(f'{len(samples_downloaded)} new samples downloaded')
+                error_record.update(
+                    samples_available.difference(samples_downloaded))
+                if samples_downloaded:
+                    log.debug('Running predictions')
+                    samples_processed = predict(
+                        model_dir, local_raw, local_pred, batch_size, num_workers,
+                        sample_filter=samples_downloaded, limit=limit,
+                        progress_bar=False)
+                    log.info(
+                        f'{len(samples_processed)} new samples processed successfully')
+                    record.update(samples_processed)
+                    write_record(record, config['local']['sample_record'])
+                    write_record(
+                        error_record, config['local']['error_record'], 'error-')
+            if datetime.now() > next_upload:
+                today = datetime.now().strftime('%Y/%m/%d')
+                todays_upload_record = tuple(upload_record) + (today,)
+                uploaded_raw = upload(todays_upload_record, compression,
+                                      local_raw, raw_prefix, upload_bucket)
+                uploaded_pred = upload(todays_upload_record, compression,
+                                       local_pred, pred_prefix, upload_bucket)
+                if uploaded_raw != uploaded_pred:
+                    raise ValueError(
+                        'Uploaded raw and predictions size mismatch')
+                # Add new days to upload record
+                if uploaded_raw:
+                    upload_record.update(uploaded_raw)
+                    write_record(
+                        upload_record, config['local']['upload_record'], 'upload-')
+                # Determine next upload time
+                next_upload += timedelta(days=1)
+                # Cleaning up old files
+                remove(local_raw, keep, remove_raw_files, remove_raw_archive,
+                       remove_from_bucket, download_bucket)
+                remove(local_pred, keep, remove_pred_files, remove_pred_archive)
+            else:
+                # Delay next iteration a bit
                 sleep(60)
-                continue
-            log.info(f'{len(samples_available)} samples available')
-            samples_downloaded = download(
-                samples_available, sample_extensions, local_raw, download_bucket)
-            log.info(f'{len(samples_downloaded)} new samples downloaded')
-            error_record.update(
-                samples_available.difference(samples_downloaded))
-            if not samples_downloaded:
-                sleep(60)
-                continue
-            log.info('Calling prediction module...')
-            # record.update(samples_downloaded)  # Local debug purposes
-            samples_processed = predict(model_dir, local_raw, local_pred,
-                                        batch_size, num_workers,
-                                        sample_filter=samples_downloaded, limit=limit,
-                                        progress_bar=False)
-            log.info(
-                f'{len(samples_processed)} new samples processed successfully')
-            record.update(samples_processed)
-            write_record(record, config['local']['sample_record'])
-            write_record(error_record, config['local']['error_record'])
     except:
         log.critical('Unhandled exception in service loop', exc_info=True)
 
 
-def check_for_new(extensions, record, error_record, bucket):
-    log.info('Checking for new samples...')
+def check_available(extensions, record, error_record, bucket):
+    log.debug('Checking for new samples')
     # Iterate over object keys in the given bucket, filtering out those that
     # don't end with the correct extensions. Next remove the extensions from
     # the key and add them to a set, which will keep only one name per sample.
     samples = set(
         obj.key.split('.')[0] for obj in bucket.objects.all()
         if obj.key.endswith(extensions))
-    # Taking a set difference with the 'record', will return those
-    # keys that are in 'samples' but not in 'record'.
+    # Taking a set difference with the 'record' and 'error_record', will return
+    # those keys that are only in 'samples', i.e., they are new.
     new_samples = samples.difference(record, error_record)
     return new_samples
 
 
 def download(samples, extensions, local_raw, bucket):
-    log.info('Downloading new samples...')
     downloaded_samples = set()
     for sample in samples:
         sample_date = ifcb.sample_to_datetime(sample)
@@ -114,6 +148,78 @@ def download(samples, extensions, local_raw, bucket):
     return downloaded_samples
 
 
+def upload(upload_record, compression, local_dir, bucket_dir, bucket):
+    log.info(f'Uploading to {bucket.name}/{bucket_dir}')
+    # 1. Find all day_dirs
+    day_dirs = [d.relative_to(local_dir)
+                for d in sorted(local_dir.glob('*/*/*')) if d.is_dir()]
+    # 2. Filter out those days that are in upload record
+    day_dirs = [d for d in day_dirs if str(d) not in upload_record]
+    uploaded_days = []
+    for day_dir in day_dirs:
+        # Make sure directory trully represents a valid date
+        try:
+            datetime(*map(int, day_dir.parts[-3:]))
+        except:
+            log.error(f"'{local_dir/day_dir}' is not a valid day directory")
+            continue
+        try:
+            # 3. Create day archive
+            archive = create_archive(local_dir/day_dir, compression)
+            # 4. Upload archive
+            obj = f'{bucket_dir}/{archive.relative_to(local_dir)}'
+            log.debug(f"Uploading '{obj}' to '{bucket.name}'")
+            bucket.upload_file(str(archive), obj)
+            # 5. Mark day as successfully uploaded
+            uploaded_days.append(str(day_dir))
+        except:
+            log.exception(f"While uploading '{local_dir/day_dir}'")
+
+    return uploaded_days
+
+
+def remove(local_dir, keep, files, archive, from_bucket=False, bucket=None):
+    removing = []
+    if files:
+        removing.append('files')
+    if archive:
+        removing.append('archive')
+    if from_bucket:
+        if not bucket:
+            raise ValueError('Removal bucket not specified')
+        removing.append(f'from {bucket.name}')
+    log.info(f"Cleaning {local_dir.name} ({', '.join(removing)})")
+
+    archive_suffixes = ['.zip', '.tar', '.tar.gz']
+    today = datetime.today()
+    day_dirs = [d for d in sorted(local_dir.glob('*/*/*')) if d.is_dir()]
+    for day_dir in day_dirs:
+        # breakpoint()
+        try:
+            date = datetime(*map(int, day_dir.parts[-3:]))
+        except:
+            log.error(f"'{day_dir}' is not a valid day directory")
+            continue
+        # Check that day is old enough to be removed
+        if (today - date).days < keep:
+            continue
+        day_samples = [path.name for path in day_dir.iterdir()]
+        if files:
+            shutil.rmtree(day_dir)
+        if archive:
+            for suffix in archive_suffixes:
+                day_archive = day_dir.with_suffix(suffix)
+                if day_archive.is_file():
+                    day_archive.unlink()
+            # Remove month directory if it's empty
+            try:
+                day_dir.parent.rmdir()
+            except OSError:
+                pass
+        if from_bucket:
+            delete_many_from_bucket(day_samples, bucket)
+
+
 def read_record(file):
     Path(file).touch(exist_ok=True)
     with open(file) as fh:
@@ -124,93 +230,17 @@ def read_record(file):
     return record
 
 
-def write_record(record, file):
-    log.info(f'Writing record ({len(record)} in total)')
+def write_record(record, file, prefix=''):
+    log.debug(f'Writing {prefix}record ({len(record)} items)')
     with open(file, 'w') as fh:
-        for sample in record:
-            fh.write(sample + '\n')
+        for item in sorted(record):
+            fh.write(item + '\n')
 
 
-def upload(args):
-    local = Path(args.local)
-    s3 = boto3.resource('s3', endpoint_url=allas.ENDPOINT_URL)
-    today = datetime.date.today()
-    # Find all directories corresponding to one day
-    day_dirs = []
-    # find_head_dirs() modifies day_dirs in place
-    find_head_dirs(local, day_dirs)
-    for day_dir in day_dirs:
-        try:
-            year, month, day = day_dir.parts[-3:]
-            date = datetime.date(int(year), int(month), int(day))
-        except Exception:
-            print(f'[ERROR] {day_dir} is not a valid day directory')
-            continue
-        # Only upload past day's data
-        if date >= today:
-            continue
-        local_zip = day_dir.with_suffix('.zip')
-        allas_zip = Path(args.allas)/year/month/local_zip.name
-        if local_zip.is_file() and not args.force:
-            print(f'[INFO] ZIP-file already exists for {day_dir}')
-            continue
-        print(f'[INFO] Creating archive {local_zip}')
-        zipped_files = []
-        with zipfile.ZipFile(local_zip, 'w') as zfh:
-            for file in day_dir.iterdir():
-                if file.is_file():
-                    zfh.write(file, arcname=file.name)
-                    zipped_files.append(file)
-        print(f'[INFO] Uploading to {allas_zip.parent}')
-        allas.upload(local_zip, allas_zip, s3)
-
-
-def remove(args):
-    if len(args.remove) > 3:
-        raise ArgumentTypeError('--remove takes max three arguments')
-    files_to_remove_from_allas = []
-    today = datetime.date.today()
-    # Find all directories corresponding to one day
-    day_dirs = []
-    # find_head_dirs() modifies day_dirs in place
-    find_head_dirs(Path(args.local), day_dirs)
-    for day_dir in day_dirs:
-        try:
-            year, month, day = day_dir.parts[-3:]
-            date = datetime.date(int(year), int(month), int(day))
-        except Exception:
-            print(
-                f'[ERROR] {day_dir} is not a valid day directory')
-            continue
-        if (today - date).days < args.keep:
-            continue
-        files_to_remove_from_allas.extend(list(day_dir.iterdir()))
-        if 'file' in args.remove:
-            shutil.rmtree(day_dir)
-            print(f'[INFO] Removed {day_dir}')
-        if 'archive' in args.remove:
-            # Remove local zip file
-            local_zip = day_dir.with_suffix('.zip')
-            if local_zip.is_file():
-                local_zip.unlink()
-            # Remove month directory if it's empty
-            try:
-                day_dir.parent.rmdir()
-            except OSError:
-                pass
-            print(f'[INFO] Removed {local_zip}')
-    if 'allas' in args.remove:
-        # Remove files from Allas
-        s3 = boto3.resource('s3', endpoint_url=allas.ENDPOINT_URL)
-        print(f'[INFO] Cleaning Allas bucket {args.allas}')
-        allas.delete_many(args.allas, files_to_remove_from_allas, s3)
-    print('[INFO] Done!')
-
-
-def find_head_dirs(path, head_dirs=[]):
-    sub_dirs = [p for p in sorted(path.iterdir()) if p.is_dir()]
-    if sub_dirs:
-        for sub_dir in sub_dirs:
-            find_head_dirs(sub_dir, head_dirs)
-    else:
-        head_dirs.append(path)
+def delete_many_from_bucket(objects, bucket):
+    response = bucket.delete_objects(
+        {'Objects': [{'Key': key} for key in objects]})
+    status_code = response['ResponseMetadata']['HTTPStatusCode']
+    if status_code != 200:
+        raise HTTPError(f's3 client returned status code {status_code}')
+    # Apparently there is no way to confirm which objects were actually deleted
