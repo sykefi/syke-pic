@@ -14,7 +14,6 @@ from requests import HTTPError
 from sykepic.utils import ifcb, logger
 from sykepic.utils.files import create_archive
 
-from . import allas
 from .predict import predict
 
 log = logging.getLogger('sync')
@@ -25,7 +24,7 @@ def main(args):
     config = ConfigParser()
     config.read(args.config)
     logger.setup(config['logging']['config'])
-    s3 = boto3.resource('s3', endpoint_url=allas.ENDPOINT_URL)
+    s3 = boto3.resource('s3', endpoint_url=config['download']['endpoint_url'])
     record = read_record(config['local']['sample_record'])
     error_record = read_record(config['local']['error_record'])
     sample_extensions = tuple(ext.strip() for ext in config.get(

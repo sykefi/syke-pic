@@ -12,7 +12,6 @@ from torch.nn import functional as F
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
-from . import allas
 from sykepic.utils import ifcb
 from sykepic.train.config import get_img_shape, get_transforms, get_network
 from sykepic.train.data import ImageDataset
