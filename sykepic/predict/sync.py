@@ -66,8 +66,9 @@ def main(args):
             log.debug(f'{len(samples_available)} samples available')
             if samples_available:
                 samples_downloaded = download(
-                    samples_available, sample_extensions, local_raw, download_bucket)
-                log.debug(f'{len(samples_downloaded)} new samples downloaded')
+                    samples_available, sample_extensions,
+                    upload_record, local_raw, download_bucket)
+                log.info(f'{len(samples_downloaded)} new samples downloaded')
                 error_record.update(
                     samples_available.difference(samples_downloaded))
                 if samples_downloaded:
@@ -124,18 +125,21 @@ def check_available(extensions, record, error_record, bucket):
     return new_samples
 
 
-def download(samples, extensions, local_raw, bucket):
+def download(samples, extensions, upload_record, local_raw, bucket):
     downloaded_samples = set()
     for sample in samples:
         sample_date = ifcb.sample_to_datetime(sample)
         day_path = sample_date.strftime('%Y/%m/%d')
+        if day_path in upload_record:
+            log.warn(
+                f"Downloading '{sample}', but '{day_path}' has already been uploaded")
         to = local_raw/day_path
         to.mkdir(exist_ok=True, parents=True)
-        log.debug(f'Downloading {sample}')
         try:
             for ext in extensions:
                 obj = sample + ext
                 if not (to/obj).is_file():
+                    log.debug(f'Downloading {bucket.name}/{obj}')
                     bucket.download_file(obj, str(to/obj))
             downloaded_samples.add(sample)
         except ClientError as e:
@@ -143,7 +147,7 @@ def download(samples, extensions, local_raw, bucket):
             if status_code == 404:
                 log.error(f"Object '{obj}' not found in '{bucket.name}'")
             else:
-                log.exception(f"While downloading object '{obj}'")
+                log.exception(f'While downloading {bucket.name}/{obj}')
                 raise
     return downloaded_samples
 
