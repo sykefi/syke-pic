@@ -17,7 +17,7 @@ def create_archive(directory, compression):
                 tar.add(file, arcname=file.name)
     elif compression == 'zip':
         archive_name = directory.with_suffix('.zip')
-        with zipfile.ZipFile(archive_name, 'w') as tar:
+        with zipfile.ZipFile(archive_name, 'w', zipfile.ZIP_DEFLATED) as tar:
             for file in directory.iterdir():
                 tar.write(file, arcname=file.name)
     else:
