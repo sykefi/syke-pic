@@ -26,7 +26,6 @@ def main(args):
     logger.setup(config['logging']['config'])
     s3 = boto3.resource('s3', endpoint_url=config['download']['endpoint_url'])
     record = read_record(config['local']['sample_record'])
-    error_record = read_record(config['local']['error_record'])
     sample_extensions = tuple(ext.strip() for ext in config.get(
         'download', 'sample_extensions').split(','))
     download_bucket = s3.Bucket(config['download']['bucket'])
@@ -61,17 +60,13 @@ def main(args):
     try:
         while True:
             samples_available = check_available(
-                sample_extensions, record, error_record, download_bucket)
+                sample_extensions, record, download_bucket)
             log.debug(f'{len(samples_available)} samples available')
             if samples_available:
                 samples_downloaded = download(
                     samples_available, sample_extensions,
                     upload_record, local_raw, download_bucket)
                 log.info(f'{len(samples_downloaded)} samples downloaded')
-                error_record.update(
-                    samples_available.difference(samples_downloaded))
-                write_record(
-                    error_record, config['local']['error_record'], 'error-')
                 if samples_downloaded:
                     log.debug('Running predictions')
                     samples_processed = predict(
@@ -110,7 +105,7 @@ def main(args):
         log.critical('Unhandled exception in service loop', exc_info=True)
 
 
-def check_available(extensions, record, error_record, bucket):
+def check_available(extensions, record, bucket):
     log.debug('Checking for new samples')
     # Iterate over object keys in the given bucket, filtering out those that
     # don't end with the correct extensions. Next remove the extensions from
@@ -118,9 +113,9 @@ def check_available(extensions, record, error_record, bucket):
     samples = set(
         obj.key.split('.')[0] for obj in bucket.objects.all()
         if obj.key.endswith(extensions))
-    # Taking a set difference with the 'record' and 'error_record', will return
-    # those keys that are only in 'samples', i.e., they are new.
-    new_samples = samples.difference(record, error_record)
+    # Taking a set difference with record, will return
+    # those keys that are only in samples, i.e., they are new.
+    new_samples = samples.difference(record)
     return new_samples
 
 
@@ -195,7 +190,6 @@ def remove(local_dir, keep, files, archive, from_bucket=False, bucket=None):
     today = datetime.today()
     day_dirs = [d for d in sorted(local_dir.glob('*/*/*')) if d.is_dir()]
     for day_dir in day_dirs:
-        # breakpoint()
         try:
             date = datetime(*map(int, day_dir.parts[-3:]))
         except:
@@ -247,3 +241,4 @@ def delete_many_from_bucket(objects, bucket):
     if status_code != 200:
         raise HTTPError(f's3 client returned status code {status_code}')
     # Apparently there is no way to confirm which objects were actually deleted
+
