@@ -67,9 +67,11 @@ def main(args):
                 samples_downloaded = download(
                     samples_available, sample_extensions,
                     upload_record, local_raw, download_bucket)
-                log.info(f'{len(samples_downloaded)} new samples downloaded')
+                log.info(f'{len(samples_downloaded)} samples downloaded')
                 error_record.update(
                     samples_available.difference(samples_downloaded))
+                write_record(
+                    error_record, config['local']['error_record'], 'error-')
                 if samples_downloaded:
                     log.debug('Running predictions')
                     samples_processed = predict(
@@ -77,11 +79,9 @@ def main(args):
                         sample_filter=samples_downloaded, limit=limit,
                         progress_bar=False)
                     log.info(
-                        f'{len(samples_processed)} new samples processed successfully')
+                        f'{len(samples_processed)} samples processed successfully')
                     record.update(samples_processed)
                     write_record(record, config['local']['sample_record'])
-                    write_record(
-                        error_record, config['local']['error_record'], 'error-')
             if datetime.now() > next_upload:
                 today = datetime.now().strftime('%Y/%m/%d')
                 todays_upload_record = tuple(upload_record) + (today,)
@@ -90,8 +90,8 @@ def main(args):
                 uploaded_pred = upload(todays_upload_record, compression,
                                        local_pred, pred_prefix, upload_bucket)
                 if uploaded_raw != uploaded_pred:
-                    raise ValueError(
-                        'Uploaded raw and predictions size mismatch')
+                    log.warn(f'Upload mismatch: raw {len(uploaded_raw)} samples != '
+                             f'predictions {len(uploaded_pred)} samples')
                 # Add new days to upload record
                 if uploaded_raw:
                     upload_record.update(uploaded_raw)
@@ -131,7 +131,7 @@ def download(samples, extensions, upload_record, local_raw, bucket):
         day_path = sample_date.strftime('%Y/%m/%d')
         if day_path in upload_record:
             log.warn(
-                f"Downloading '{sample}', but '{day_path}' has already been uploaded")
+                f'Downloading {sample}, but {day_path} has already been uploaded')
         to = local_raw/day_path
         to.mkdir(exist_ok=True, parents=True)
         try:
@@ -144,7 +144,7 @@ def download(samples, extensions, upload_record, local_raw, bucket):
         except ClientError as e:
             status_code = e.response['ResponseMetadata']['HTTPStatusCode']
             if status_code == 404:
-                log.error(f"Object '{obj}' not found in '{bucket.name}'")
+                log.error(f'Object {obj} not found in {bucket.name}')
             else:
                 log.exception(f'While downloading {bucket.name}/{obj}')
                 raise
@@ -152,7 +152,6 @@ def download(samples, extensions, upload_record, local_raw, bucket):
 
 
 def upload(upload_record, compression, local_dir, bucket_dir, bucket):
-    log.info(f'Uploading to {bucket.name}/{bucket_dir}')
     # 1. Find all day_dirs
     day_dirs = [d.relative_to(local_dir)
                 for d in sorted(local_dir.glob('*/*/*')) if d.is_dir()]
@@ -164,19 +163,19 @@ def upload(upload_record, compression, local_dir, bucket_dir, bucket):
         try:
             datetime(*map(int, day_dir.parts[-3:]))
         except:
-            log.error(f"'{local_dir/day_dir}' is not a valid day directory")
+            log.error(f'{local_dir/day_dir} is not a valid day directory')
             continue
         try:
             # 3. Create day archive
             archive = create_archive(local_dir/day_dir, compression)
             # 4. Upload archive
             obj = f'{bucket_dir}/{archive.relative_to(local_dir)}'
-            log.debug(f"Uploading '{obj}' to '{bucket.name}'")
+            log.info(f'Uploading {obj} to {bucket.name}')
             bucket.upload_file(str(archive), obj)
             # 5. Mark day as successfully uploaded
             uploaded_days.append(str(day_dir))
         except:
-            log.exception(f"While uploading '{local_dir/day_dir}'")
+            log.exception(f'While uploading {local_dir/day_dir}')
 
     return uploaded_days
 
@@ -190,8 +189,7 @@ def remove(local_dir, keep, files, archive, from_bucket=False, bucket=None):
     if from_bucket:
         if not bucket:
             raise ValueError('Removal bucket not specified')
-        removing.append(f'from {bucket.name}')
-    log.info(f"Cleaning {local_dir.name} ({', '.join(removing)})")
+        removing.append(bucket.name)
 
     archive_suffixes = ['.zip', '.tar', '.tar.gz']
     today = datetime.today()
@@ -201,12 +199,14 @@ def remove(local_dir, keep, files, archive, from_bucket=False, bucket=None):
         try:
             date = datetime(*map(int, day_dir.parts[-3:]))
         except:
-            log.error(f"'{day_dir}' is not a valid day directory")
+            log.error(f'{day_dir} is not a valid day directory')
             continue
         # Check that day is old enough to be removed
         if (today - date).days < keep:
             continue
         day_samples = [path.name for path in day_dir.iterdir()]
+        log.info(f"Removing {day_dir.relative_to(local_dir.parent)} "
+                 f"({' + '.join(removing)})")
         if files:
             shutil.rmtree(day_dir)
         if archive:
@@ -242,7 +242,7 @@ def write_record(record, file, prefix=''):
 
 def delete_many_from_bucket(objects, bucket):
     response = bucket.delete_objects(
-        {'Objects': [{'Key': key} for key in objects]})
+        Delete={'Objects': [{'Key': key} for key in objects]})
     status_code = response['ResponseMetadata']['HTTPStatusCode']
     if status_code != 200:
         raise HTTPError(f's3 client returned status code {status_code}')
