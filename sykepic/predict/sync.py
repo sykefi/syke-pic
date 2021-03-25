@@ -66,7 +66,7 @@ def main(args):
                 samples_downloaded = download(
                     samples_available, sample_extensions,
                     upload_record, local_raw, download_bucket)
-                log.info(f'{len(samples_downloaded)} samples downloaded')
+                log.debug(f'{len(samples_downloaded)} samples downloaded')
                 if samples_downloaded:
                     log.debug('Running predictions')
                     samples_processed = predict(
@@ -74,7 +74,7 @@ def main(args):
                         sample_filter=samples_downloaded, limit=limit,
                         progress_bar=False)
                     log.info(
-                        f'{len(samples_processed)} samples processed successfully')
+                        f'{len(samples_processed)} new samples processed')
                     record.update(samples_processed)
                     write_record(record, config['local']['sample_record'])
             if datetime.now() > next_upload:
@@ -92,12 +92,13 @@ def main(args):
                     upload_record.update(uploaded_raw)
                     write_record(
                         upload_record, config['local']['upload_record'], 'upload-')
-                # Determine next upload time
-                next_upload += timedelta(days=1)
                 # Cleaning up old files
                 remove(local_raw, keep, remove_raw_files, remove_raw_archive,
                        remove_from_bucket, download_bucket)
                 remove(local_pred, keep, remove_pred_files, remove_pred_archive)
+                # Determine next upload time
+                next_upload += timedelta(days=1)
+                log.info(f'Upload and cleanup done. Next time is {next_upload}')
             else:
                 # Delay next iteration a bit
                 sleep(60)
