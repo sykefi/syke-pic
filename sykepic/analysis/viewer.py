@@ -4,12 +4,11 @@ import shutil
 from pathlib import Path
 
 import numpy as np
-import pandas as pd
 from IPython.display import clear_output, display
 from ipywidgets import Box, Button, Dropdown, Image, Label, Layout, Text, VBox
 
 from .classification import read_predictions
-from sykepic.predict import ifcb
+from sykepic.utils.ifcb import extract_sample_images
 
 
 class PredictionViewer():
@@ -178,13 +177,13 @@ class PredictionViewer():
             for sample, img_dir in self.img_dir.items():
                 if not img_dir.is_dir() or len(list(img_dir.iterdir())) == 0:
                     print(f'[INFO] Extracting images for {sample}')
-                    ifcb.extract_sample_images(
+                    extract_sample_images(
                         sample, self.raw_dir, img_dir, True)
         # One sample
         else:
             if (not self.img_dir.is_dir() or
                     len(list(self.img_dir.iterdir())) == 0):
-                ifcb.extract_sample_images(
+                extract_sample_images(
                     self.sample, self.raw_dir, self.img_dir, True)
 
         # Filter predictions by class

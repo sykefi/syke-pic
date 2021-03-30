@@ -4,7 +4,7 @@ from pathlib import Path
 import pandas as pd
 from tqdm import tqdm
 
-from sykepic.predict.ifcb import sample_to_datetime
+from sykepic.utils.ifcb import sample_to_datetime
 from sykepic.analysis.classification import read_predictions
 
 

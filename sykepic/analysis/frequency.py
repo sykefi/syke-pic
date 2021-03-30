@@ -4,7 +4,7 @@ from pathlib import Path
 import pandas as pd
 
 from .classification import read_predictions
-from sykepic.predict.ifcb import sample_to_datetime
+from sykepic.utils.ifcb import sample_to_datetime
 
 
 def frequency_df(pred_dir, thresholds=0.0, start=None, end=None,
@@ -136,4 +136,3 @@ def group_predictions(df):
     df.columns.name = ''
     df.index.name = ''
     return df
-
