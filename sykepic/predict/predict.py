@@ -5,7 +5,6 @@ import shutil
 from configparser import ConfigParser
 from pathlib import Path
 
-import boto3
 import numpy as np
 import torch
 from torch.nn import functional as F
@@ -25,11 +24,11 @@ def main(args):
     else:
         args.softmax_exp = float(args.softmax_exp)
     predict(args.model, args.raw, args.out, args.batch_size,
-            args.num_workers, args.softmax_exp, args.limit, args.force)
+            args.num_workers, args.softmax_exp, None, args.limit, args.force)
 
 
-def predict(model, raw_dir, out_dir, batch_size, num_workers, sample_filter=None,
-            softmax_exp=None, limit=None, force=False, progress_bar=True):
+def predict(model, raw_dir, out_dir, batch_size, num_workers, softmax_exp=None,
+            sample_filter=None, limit=None, force=False, progress_bar=True):
     # Find all samples from raw_dir, optionally filter them by name (sync)
     samples = []
     for adc in sorted(Path(raw_dir).glob('**/*.adc')):
@@ -99,7 +98,7 @@ def predict(model, raw_dir, out_dir, batch_size, num_workers, sample_filter=None
                     data += f'\n{roi},'
                     data += ','.join(f'{p:.5f}' for p in probs)
                 fh.write(data)
-        except:
+        except Exception:
             log.exception("While predicting '{sample}'")
             raise
         finally:

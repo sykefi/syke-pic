@@ -2,7 +2,6 @@
 
 import logging
 import shutil
-from argparse import ArgumentTypeError
 from configparser import ConfigParser
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -39,7 +38,9 @@ def main(args):
     batch_size = config.getint('predict', 'batch_size')
     num_workers = config.getint('predict', 'num_workers')
     limit = config['predict']['limit']
-    limit = int(limit) if limit else None
+    limit = int(limit) if limit is not None else None
+    softmax_exp = config['predict']['softmax_exp']
+    softmax_exp = float(softmax_exp) if softmax_exp is not None else None
     upload_time = datetime.strptime(config['upload']['time'], '%H:%M')
     next_upload = datetime.now().replace(
         hour=upload_time.hour, minute=upload_time.minute, second=0, microsecond=0)
@@ -71,8 +72,8 @@ def main(args):
                     log.debug('Running predictions')
                     samples_processed = predict(
                         model_dir, local_raw, local_pred, batch_size, num_workers,
-                        sample_filter=samples_downloaded, limit=limit,
-                        progress_bar=False)
+                        softmax_exp=softmax_exp, sample_filter=samples_downloaded,
+                        limit=limit, progress_bar=False)
                     log.info(
                         f'{len(samples_processed)} new samples processed')
                     record.update(samples_processed)
@@ -98,11 +99,12 @@ def main(args):
                 remove(local_pred, keep, remove_pred_files, remove_pred_archive)
                 # Determine next upload time
                 next_upload += timedelta(days=1)
-                log.info(f'Upload and cleanup done. Next time is {next_upload}')
+                log.info(
+                    f'Upload and cleanup done. Next time is {next_upload}')
             else:
                 # Delay next iteration a bit
                 sleep(60)
-    except:
+    except Exception:
         log.critical('Unhandled exception in service loop', exc_info=True)
 
 
@@ -158,7 +160,7 @@ def upload(upload_record, compression, local_dir, bucket_dir, bucket):
         # Make sure directory trully represents a valid date
         try:
             datetime(*map(int, day_dir.parts[-3:]))
-        except:
+        except Exception:
             log.error(f'{local_dir/day_dir} is not a valid day directory')
             continue
         try:
@@ -170,7 +172,7 @@ def upload(upload_record, compression, local_dir, bucket_dir, bucket):
             bucket.upload_file(str(archive), obj)
             # 5. Mark day as successfully uploaded
             uploaded_days.append(str(day_dir))
-        except:
+        except Exception:
             log.exception(f'While uploading {local_dir/day_dir}')
 
     return uploaded_days
@@ -193,7 +195,7 @@ def remove(local_dir, keep, files, archive, from_bucket=False, bucket=None):
     for day_dir in day_dirs:
         try:
             date = datetime(*map(int, day_dir.parts[-3:]))
-        except:
+        except Exception:
             log.error(f'{day_dir} is not a valid day directory')
             continue
         # Check that day is old enough to be removed
@@ -242,4 +244,3 @@ def delete_many_from_bucket(objects, bucket):
     if status_code != 200:
         raise HTTPError(f's3 client returned status code {status_code}')
     # Apparently there is no way to confirm which objects were actually deleted
-
