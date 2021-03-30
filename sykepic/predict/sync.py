@@ -38,9 +38,9 @@ def main(args):
     batch_size = config.getint('predict', 'batch_size')
     num_workers = config.getint('predict', 'num_workers')
     limit = config['predict']['limit']
-    limit = int(limit) if limit is not None else None
+    limit = int(limit) if limit not in ['', None] else None
     softmax_exp = config['predict']['softmax_exp']
-    softmax_exp = float(softmax_exp) if softmax_exp is not None else None
+    softmax_exp = float(softmax_exp) if softmax_exp not in ['', None] else None
     upload_time = datetime.strptime(config['upload']['time'], '%H:%M')
     next_upload = datetime.now().replace(
         hour=upload_time.hour, minute=upload_time.minute, second=0, microsecond=0)
