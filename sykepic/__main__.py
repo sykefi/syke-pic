@@ -17,9 +17,13 @@ from argparse import ArgumentParser
 
 from sykepic.train import train, dataset
 from sykepic.predict import predict, sync
+from sykepic.utils import logger
 
 
 def main():
+    # Set default logger settings
+    logger.setup()
+
     parser = ArgumentParser(
         prog='sykepic',
         description='CLI tool for plankton image classification at SYKE',
@@ -81,44 +85,18 @@ def main():
         '-f', '--force', action='store_true',
         help='Force overwrite of any previous predictions'
     )
-    predict_parser.add_argument(
-        '--allas', metavar='PATH',
-        help='Path to bucket or directory in Allas with raw files'
-    )
+    # predict_parser.add_argument(
+    #     '--allas', metavar='PATH',
+    #     help='Path to bucket or directory in Allas with raw files'
+    # )
 
     # Parser for 'sykepic sync'
     sync_parser = subparsers.add_parser(
-        'sync', description='Synchronise local data with Allas'
+        'sync', description='Synchronization service with Allas'
     )
     sync_parser.set_defaults(func=sync.main)
     sync_parser.add_argument(
-        '-l', '--local', required=True, metavar='DIR',
-        help='Local directory to sync'
-    )
-    sync_parser.add_argument(
-        '-a', '--allas', required=True, metavar='PATH',
-        help='Allas bucket or bucket/directory'
-    )
-    sync_action = sync_parser.add_mutually_exclusive_group(required=True)
-    sync_action.add_argument(
-        '-d', '--download', action='store_true',
-        help='Download new data from Allas to local'
-    )
-    sync_action.add_argument(
-        '-u', '--upload', action='store_true',
-        help='Archive and upload local data to Allas'
-    )
-    sync_parser.add_argument(
-        '-r', '--remove', action='count',
-        help='Remove local directory (-r), remove local archive as well (-rr)'
-    )
-    sync_parser.add_argument(
-        '--clean-allas', metavar='PATH',
-        help='Allas path that will be cleared of synched and archived files'
-    )
-    sync_parser.add_argument(
-        '-f', '--force', action='store_true',
-        help='Force archive creation and upload'
+        'config', metavar='FILE', help='Configuration file'
     )
 
     # Parser for 'sykepic dataset'

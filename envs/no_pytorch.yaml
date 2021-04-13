@@ -9,5 +9,7 @@ dependencies:
     - scikit-learn
     - tqdm
     - boto3
+    - requests
+    - pyyaml
     - pip:
         - opencv-python-headless

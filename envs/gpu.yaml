@@ -11,6 +11,8 @@ dependencies:
     - scikit-learn
     - tqdm
     - boto3
+    - requests
+    - pyyaml
     - pytorch
     - torchvision
     - cudatoolkit=10.2

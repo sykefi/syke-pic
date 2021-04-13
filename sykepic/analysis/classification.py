@@ -1,4 +1,3 @@
-import datetime
 from pathlib import Path
 
 import pandas as pd
@@ -49,7 +48,7 @@ def make_classification(row, thresholds):
 def insert_classifications(df, thresholds):
     """This function modifies `df` in place"""
     preds, status = zip(
-            *df.apply(make_classification, axis=1, args=(thresholds,)))
+        *df.apply(make_classification, axis=1, args=(thresholds,)))
     df.insert(0, 'prediction', preds)
     df['prediction'] = df['prediction'].astype('category')
     df.insert(1, 'classified', status)
@@ -74,5 +73,6 @@ def read_predictions(predictions, thresholds=0.0):
     if isinstance(thresholds, (str, Path)):
         thresholds = threshold_dictionary(thresholds)
     # Insert 'prediction' and 'classified' columns to dataframe
-    insert_classifications(df, thresholds)
+    if not df.empty:
+        insert_classifications(df, thresholds)
     return df
