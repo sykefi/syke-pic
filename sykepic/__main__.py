@@ -25,65 +25,68 @@ def main():
     logger.setup()
 
     parser = ArgumentParser(
-        prog='sykepic',
-        description='CLI tool for plankton image classification at SYKE',
+        prog="sykepic",
+        description="CLI tool for plankton image classification at SYKE",
     )
     subparsers = parser.add_subparsers(
-        title='available sub-commands', required=True, dest='sub-command',
-        help='sykepic {sub-command} -h for more information',
+        title="available sub-commands",
+        required=True,
+        dest="sub-command",
+        help="sykepic {sub-command} -h for more information",
     )
 
     # Parser for 'sykepic train'
     train_parser = subparsers.add_parser(
-        'train', description='Train neural network classifiers'
+        "train", description="Train neural network classifiers"
     )
     train_parser.set_defaults(func=train.main)
+    train_parser.add_argument("config", help="Path to config file")
     train_parser.add_argument(
-        'config', help='Path to config file'
+        "--collage",
+        nargs=3,
+        metavar=("HEIGHT", "WIDTH", "FILE"),
+        help=("Save a HEIGHT x WIDTH collage of training images to FILE."),
     )
     train_parser.add_argument(
-        '--collage', nargs=3, metavar=('HEIGHT', 'WIDTH', 'FILE'),
-        help=('Save a HEIGHT x WIDTH collage of training images to FILE.')
-    )
-    train_parser.add_argument(
-        '--dist', metavar='FILE',
-        help='Save a class distribution plot to FILE'
+        "--dist", metavar="FILE", help="Save a class distribution plot to FILE"
     )
 
     # Parser for 'sykepic predict'
     predict_parser = subparsers.add_parser(
-        'predict', description='Use a trained classifier for inference'
+        "predict", description="Use a trained classifier for inference"
     )
     predict_parser.set_defaults(func=predict.main)
+    predict_parser.add_argument("model", help="Model directory")
+    predict_parser.add_argument("raw", help="Root directory of raw IFCB data")
+    predict_parser.add_argument("out", help="Root output directory")
     predict_parser.add_argument(
-        'model', help='Model directory'
+        "-b", "--batch_size", type=int, default=64, metavar="INT", help="Default is 64"
     )
     predict_parser.add_argument(
-        'raw', help='Root directory of raw IFCB data'
+        "-w", "--num_workers", type=int, default=2, metavar="INT", help="Default is 2"
     )
     predict_parser.add_argument(
-        'out', help='Root output directory'
+        "-l",
+        "--limit",
+        type=int,
+        metavar="INT",
+        help=(
+            "Limit how many samples to process. "
+            "Samples will be drawn evenly from raw directory."
+        ),
     )
     predict_parser.add_argument(
-        '-b', '--batch_size', type=int, default=64, metavar='INT',
-        help='Default is 64'
+        "-e",
+        "--softmax_exp",
+        default=1.3,
+        metavar="FLOAT",
+        help=("Exponent to use in softmax, use 'e' for normal softmax"),
     )
     predict_parser.add_argument(
-        '-w', '--num_workers', type=int, default=2, metavar='INT',
-        help='Default is 2'
-    )
-    predict_parser.add_argument(
-        '-l', '--limit', type=int, metavar='INT',
-        help=('Limit how many samples to process. '
-              'Samples will be drawn evenly from raw directory.')
-    )
-    predict_parser.add_argument(
-        '-e', '--softmax_exp', default=1.3, metavar='FLOAT',
-        help=("Exponent to use in softmax, use 'e' for normal softmax")
-    )
-    predict_parser.add_argument(
-        '-f', '--force', action='store_true',
-        help='Force overwrite of any previous predictions'
+        "-f",
+        "--force",
+        action="store_true",
+        help="Force overwrite of any previous predictions",
     )
     # predict_parser.add_argument(
     #     '--allas', metavar='PATH',
@@ -92,35 +95,29 @@ def main():
 
     # Parser for 'sykepic sync'
     sync_parser = subparsers.add_parser(
-        'sync', description='Synchronization service with Allas'
+        "sync", description="Synchronization service with Allas"
     )
     sync_parser.set_defaults(func=sync.main)
-    sync_parser.add_argument(
-        'config', metavar='FILE', help='Configuration file'
-    )
+    sync_parser.add_argument("config", metavar="FILE", help="Configuration file")
 
     # Parser for 'sykepic dataset'
     dataset_parser = subparsers.add_parser(
-        'dataset', description='Create a usable dataset'
+        "dataset", description="Create a usable dataset"
     )
     dataset_parser.set_defaults(func=dataset.main)
+    dataset_parser.add_argument("original", help="Original dataset path")
+    dataset_parser.add_argument("new", help="New dataset path")
     dataset_parser.add_argument(
-        'original', help='Original dataset path'
+        "--min", type=int, metavar="INT", help="Mininmum amount of samples per class"
     )
     dataset_parser.add_argument(
-        'new', help='New dataset path'
+        "--max",
+        type=int,
+        metavar="INT",
+        help="Maximum amount samples per class, with random sampling.",
     )
     dataset_parser.add_argument(
-        '--min', type=int, metavar='INT',
-        help='Mininmum amount of samples per class'
-    )
-    dataset_parser.add_argument(
-        '--max', type=int, metavar='INT',
-        help='Maximum amount samples per class, with random sampling.'
-    )
-    dataset_parser.add_argument(
-        '--exclude', nargs='*', default=[],
-        help='Sub-directories to exlude'
+        "--exclude", nargs="*", default=[], help="Sub-directories to exlude"
     )
 
     # Get arguments for the subparser specified
@@ -129,5 +126,5 @@ def main():
     args.func(args)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

@@ -17,13 +17,13 @@ class Compose:
         self.transforms = transforms
         self.target_dims = target_dims
         self.border = border
-        if self.border == 'white':
+        if self.border == "white":
             self.border = (255, 255, 255)
-        elif self.border == 'black':
+        elif self.border == "black":
             self.border = (0, 0, 0)
 
     def __call__(self, img):
-        if self.border == 'mode':
+        if self.border == "mode":
             mode = mode_pixel_value(img)
             border = (mode, mode, mode)
         else:
@@ -44,10 +44,10 @@ class Compose:
                 width = False
                 if h > w:
                     width = True
-                    limit = int((target_w - new_w)/2.5)
+                    limit = int((target_w - new_w) / 2.5)
                 elif w > h:
                     height = True
-                    limit = int((target_h - new_h)/2.5)
+                    limit = int((target_h - new_h) / 2.5)
                 img = t(img, limit, border, height, width)
             elif isinstance(t, (Zoom, Rotate)):
                 img = t(img, border)
@@ -56,11 +56,11 @@ class Compose:
         return img
 
     def __repr__(self):
-        format_string = self.__class__.__name__ + '('
+        format_string = self.__class__.__name__ + "("
         for t in self.transforms:
-            format_string += '\n'
-            format_string += '    {0}'.format(t)
-        format_string += '\n)'
+            format_string += "\n"
+            format_string += "    {0}".format(t)
+        format_string += "\n)"
         return format_string
 
 
@@ -74,7 +74,7 @@ class Resize:
         return img
 
     def __repr__(self):
-        return 'Resize()'
+        return "Resize()"
 
 
 class FlipHorizontal:
@@ -85,7 +85,7 @@ class FlipHorizontal:
         return img
 
     def __repr__(self):
-        return 'FlipHorizontal()'
+        return "FlipHorizontal()"
 
 
 class FlipVertical:
@@ -96,7 +96,7 @@ class FlipVertical:
         return img
 
     def __repr__(self):
-        return 'FlipVertical()'
+        return "FlipVertical()"
 
 
 class Translate:
@@ -108,12 +108,11 @@ class Translate:
         if width:
             x = random.randint(-limit, limit)
         M = np.float32([[1, 0, x], [0, 1, y]])
-        img = cv2.warpAffine(img, M, (img.shape[1], img.shape[0]),
-                             borderValue=border)
+        img = cv2.warpAffine(img, M, (img.shape[1], img.shape[0]), borderValue=border)
         return img
 
     def __repr__(self):
-        return 'Translate()'
+        return "Translate()"
 
 
 class Zoom:
@@ -125,15 +124,20 @@ class Zoom:
     def __call__(self, img, border):
         fx = fy = round(random.uniform(*self.zoom_range), 2)
         h, w = img.shape[:2]
-        img = cv2.resize(img, None, fx=fx, fy=fy,
-                         interpolation=cv2.INTER_LINEAR)
+        img = cv2.resize(img, None, fx=fx, fy=fy, interpolation=cv2.INTER_LINEAR)
         zh, zw = img.shape[:2]
         if fx < 1:
             pad_1 = int((w - zw) / 2)
             pad_2 = w - zw - pad_1
-            img = cv2.copyMakeBorder(img, pad_1, pad_2, pad_1, pad_2,
-                                     borderType=cv2.BORDER_CONSTANT,
-                                     value=border)
+            img = cv2.copyMakeBorder(
+                img,
+                pad_1,
+                pad_2,
+                pad_1,
+                pad_2,
+                borderType=cv2.BORDER_CONSTANT,
+                value=border,
+            )
         else:
             crop_1 = (zw - w) / 2
             crop_2 = zw - crop_1
@@ -143,7 +147,7 @@ class Zoom:
         return img
 
     def __repr__(self):
-        return f'Zoom(range={self.zoom_range})'
+        return f"Zoom(range={self.zoom_range})"
 
 
 class Rotate:
@@ -159,7 +163,7 @@ class Rotate:
         return img
 
     def __repr__(self):
-        return f'Rotate(max_angle={self.max_angle})'
+        return f"Rotate(max_angle={self.max_angle})"
 
 
 class ChangeBrightness:
@@ -168,12 +172,12 @@ class ChangeBrightness:
 
     def __call__(self, img):
         value = random.uniform(*self.brightness_range)
-        img = img*value
+        img = img * value
         img = img.clip(0, 255).astype(np.uint8)
         return img
 
     def __repr__(self):
-        return f'ChangeBrightness(brightness_range={self.brightness_range})'
+        return f"ChangeBrightness(brightness_range={self.brightness_range})"
 
 
 def get_new_dims(h, w, target_h, target_w):
@@ -194,8 +198,9 @@ def get_new_dims(h, w, target_h, target_w):
     return new_h, new_w
 
 
-def resize_with_border(img, new_dims, target_dims, border=(0, 0, 0),
-                       interpolation=cv2.INTER_LINEAR):
+def resize_with_border(
+    img, new_dims, target_dims, border=(0, 0, 0), interpolation=cv2.INTER_LINEAR
+):
     """Resize image while maintaining aspect ratio."""
 
     new_h, new_w = new_dims
@@ -209,8 +214,15 @@ def resize_with_border(img, new_dims, target_dims, border=(0, 0, 0),
     pad_left = pad_w // 2
     pad_right = pad_w - pad_left
     b, g, r = border
-    img = cv2.copyMakeBorder(img, pad_top, pad_bot, pad_left, pad_right,
-                             borderType=cv2.BORDER_CONSTANT, value=[b, g, r])
+    img = cv2.copyMakeBorder(
+        img,
+        pad_top,
+        pad_bot,
+        pad_left,
+        pad_right,
+        borderType=cv2.BORDER_CONSTANT,
+        value=[b, g, r],
+    )
     return img
 
 
@@ -242,8 +254,8 @@ def calculate_mean_std(img_paths, grayscale=False):
         (3 by default, but 1 with `grayscale` set to True).
     """
 
-    mean_sum = .0
-    std_sum = .0
+    mean_sum = 0.0
+    std_sum = 0.0
     img_paths = list(img_paths)
     for path in img_paths:
         if grayscale:
@@ -274,8 +286,8 @@ def calculate_mean_dims(img_paths):
         Rounded mean values for height and width respectively.
     """
 
-    height = 0.
-    width = 0.
+    height = 0.0
+    width = 0.0
     for i, path in enumerate(img_paths, start=1):
         img = cv2.imread(str(path))
         h, w, c = img.shape

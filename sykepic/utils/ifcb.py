@@ -26,7 +26,7 @@ def sample_to_datetime(sample):
         A datetime object extracted from sample name
     """
 
-    m = re.match(r'D(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})', sample)
+    m = re.match(r"D(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})", sample)
     timestamp = datetime.datetime(*[int(t) for t in m.groups()])
     return timestamp
 
@@ -53,11 +53,11 @@ def extract_sample_images(sample, raw_dir, out_dir, exist_ok=False):
     """
 
     try:
-        adc = next(Path(raw_dir).glob(f'**/{sample}.adc'))
+        adc = next(Path(raw_dir).glob(f"**/{sample}.adc"))
     except StopIteration:
         print(f"[ERROR] Sample '{sample}' not found in '{raw_dir}'")
         raise
-    roi = adc.with_suffix('.roi')
+    roi = adc.with_suffix(".roi")
     raw_to_png(adc, roi, out_dir, exist_ok=exist_ok)
 
 
@@ -85,15 +85,15 @@ def raw_to_png(adc, roi, out_dir=None, limit=None, exist_ok=False):
         if not f.is_file():
             raise FileNotFoundError(f)
     if not out_dir:
-        out_dir = Path(adc.with_suffix(''))
+        out_dir = Path(adc.with_suffix(""))
     Path.mkdir(out_dir, parents=True, exist_ok=exist_ok)
 
     # Read bytes from .roi-file into 8-bit integers
-    roi_data = np.fromfile(roi, dtype='uint8')
+    roi_data = np.fromfile(roi, dtype="uint8")
     # Parse each line of .adc-file
     with open(adc) as adc_fh:
         for i, line in enumerate(adc_fh, start=1):
-            line = line.split(',')
+            line = line.split(",")
             roi_x = int(line[15])  # ROI width
             roi_y = int(line[16])  # ROI height
             start = int(line[17])  # start byte
@@ -106,11 +106,11 @@ def raw_to_png(adc, roi, out_dir=None, limit=None, exist_ok=False):
                 end = start + (roi_x * roi_y)
                 # Reshape into 2-dimensions
                 img = roi_data[start:end].reshape((roi_y, roi_x))
-                img_path = out_dir/f'{i}.png'
+                img_path = out_dir / f"{i}.png"
                 # imwrite reshapes automatically to 3-dimensions (RGB)
                 cv2.imwrite(str(img_path), img)
             except Exception as e:
-                print(f'[ERROR] {adc.name} line {i}: {e}')
+                print(f"[ERROR] {adc.name} line {i}: {e}")
                 # with open(out_dir/'errors.log', 'a') as log_fh:
                 #     log_fh.write(f'{adc.name}: line {i}: {e}\n')
             if limit and i >= limit:

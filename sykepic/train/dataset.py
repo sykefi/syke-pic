@@ -9,7 +9,7 @@ def main(args):
 
 
 def create_dataset(original_dataset, new_dataset, min_N, max_N, exclude):
-    print(f'[INFO] Creating new dataset in {new_dataset}')
+    print(f"[INFO] Creating new dataset in {new_dataset}")
     class_names = filter_classes(original_dataset, min_N, None, exclude)
     copy_dataset(original_dataset, new_dataset, class_names, max_N)
 
@@ -37,21 +37,20 @@ def filter_classes(dataset, min_N=None, max_N=None, exclude=[]):
     return classes
 
 
-def copy_dataset(original_dataset, new_dataset, classes=None, max_N=None,
-                 exclude=[]):
+def copy_dataset(original_dataset, new_dataset, classes=None, max_N=None, exclude=[]):
     for dirpath, _, filenames in os.walk(original_dataset):
         label = os.path.basename(dirpath)
         if (not classes or label in classes) and filenames:
-            label = label.replace(' ', '_')
+            label = label.replace(" ", "_")
             dst_dir = os.path.join(new_dataset, label)
             os.makedirs(dst_dir)
-            print(f'\tCopying files from {dirpath}')
+            print(f"\tCopying files from {dirpath}")
             for i, filename in enumerate(filenames, start=1):
                 if max_N and i > max_N:
                     break
                 src = os.path.join(dirpath, filename)
                 if src in exclude:
                     continue
-                file_ext = filename.split('.')[-1]
-                dst = os.path.join(dst_dir, f'{label}_{i}.{file_ext}')
+                file_ext = filename.split(".")[-1]
+                dst = os.path.join(dst_dir, f"{label}_{i}.{file_ext}")
                 shutil.copyfile(src, dst)

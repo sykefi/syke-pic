@@ -15,107 +15,140 @@ from sykepic.utils.files import create_archive
 
 from .predict import predict
 
-log = logging.getLogger('sync')
+log = logging.getLogger("sync")
 
 
 def main(args):
     # Parse config file and set up
     config = ConfigParser()
     config.read(args.config)
-    logger.setup(config['logging']['config'])
-    s3 = boto3.resource('s3', endpoint_url=config['download']['endpoint_url'])
-    record = read_record(config['local']['sample_record'])
-    sample_extensions = tuple(ext.strip() for ext in config.get(
-        'download', 'sample_extensions').split(','))
-    download_bucket = s3.Bucket(config['download']['bucket'])
-    local_raw = Path(config['local']['raw'])
+    logger.setup(config["logging"]["config"])
+    s3 = boto3.resource("s3", endpoint_url=config["download"]["endpoint_url"])
+    record = read_record(config["local"]["sample_record"])
+    sample_extensions = tuple(
+        ext.strip() for ext in config.get("download", "sample_extensions").split(",")
+    )
+    download_bucket = s3.Bucket(config["download"]["bucket"])
+    local_raw = Path(config["local"]["raw"])
     local_raw.mkdir(parents=True, exist_ok=True)
-    local_pred = Path(config['local']['predictions'])
+    local_pred = Path(config["local"]["predictions"])
     local_pred.mkdir(parents=True, exist_ok=True)
-    model_dir = Path(config['predict']['model'])
+    model_dir = Path(config["predict"]["model"])
     if not model_dir.is_dir():
         raise OSError(f"Model directory '{model_dir} not found'")
-    batch_size = config.getint('predict', 'batch_size')
-    num_workers = config.getint('predict', 'num_workers')
-    limit = config['predict']['limit']
-    limit = int(limit) if limit not in ['', None] else None
-    softmax_exp = config['predict']['softmax_exp']
-    softmax_exp = float(softmax_exp) if softmax_exp not in ['', None] else None
-    upload_time = datetime.strptime(config['upload']['time'], '%H:%M')
+    batch_size = config.getint("predict", "batch_size")
+    num_workers = config.getint("predict", "num_workers")
+    limit = config["predict"]["limit"]
+    limit = int(limit) if limit not in ["", None] else None
+    softmax_exp = config["predict"]["softmax_exp"]
+    softmax_exp = float(softmax_exp) if softmax_exp not in ["", None] else None
+    upload_time = datetime.strptime(config["upload"]["time"], "%H:%M")
     next_upload = datetime.now().replace(
-        hour=upload_time.hour, minute=upload_time.minute, second=0, microsecond=0)
-    upload_record = read_record(config['local']['upload_record'])
-    upload_bucket = s3.Bucket(config['upload']['bucket'])
-    raw_prefix = config['upload']['raw_prefix']
-    pred_prefix = config['upload']['predictions_prefix']
-    compression = config['upload']['compression']
-    remove_raw_files = config.getboolean('remove', 'raw_files')
-    remove_pred_files = config.getboolean('remove', 'prediction_files')
-    remove_raw_archive = config.getboolean('remove', 'raw_archive')
-    remove_pred_archive = config.getboolean('remove', 'prediction_archive')
-    remove_from_bucket = config.getboolean('remove', 'from_download_bucket')
-    keep = config.getint('remove', 'keep')
+        hour=upload_time.hour, minute=upload_time.minute, second=0, microsecond=0
+    )
+    upload_record = read_record(config["local"]["upload_record"])
+    upload_bucket = s3.Bucket(config["upload"]["bucket"])
+    raw_prefix = config["upload"]["raw_prefix"]
+    pred_prefix = config["upload"]["predictions_prefix"]
+    compression = config["upload"]["compression"]
+    remove_raw_files = config.getboolean("remove", "raw_files")
+    remove_pred_files = config.getboolean("remove", "prediction_files")
+    remove_raw_archive = config.getboolean("remove", "raw_archive")
+    remove_pred_archive = config.getboolean("remove", "prediction_archive")
+    remove_from_bucket = config.getboolean("remove", "from_download_bucket")
+    keep = config.getint("remove", "keep")
 
     # Start service loop
-    log.info('Synchronization service started')
+    log.info("Synchronization service started")
     try:
         while True:
             samples_available = check_available(
-                sample_extensions, record, download_bucket)
-            log.debug(f'{len(samples_available)} samples available')
+                sample_extensions, record, download_bucket
+            )
+            log.debug(f"{len(samples_available)} samples available")
             if samples_available:
                 samples_downloaded = download(
-                    samples_available, sample_extensions,
-                    upload_record, local_raw, download_bucket)
-                log.debug(f'{len(samples_downloaded)} samples downloaded')
+                    samples_available,
+                    sample_extensions,
+                    upload_record,
+                    local_raw,
+                    download_bucket,
+                )
+                log.debug(f"{len(samples_downloaded)} samples downloaded")
                 if samples_downloaded:
-                    log.debug('Running predictions')
+                    log.debug("Running predictions")
                     samples_processed = predict(
-                        model_dir, local_raw, local_pred, batch_size, num_workers,
-                        softmax_exp=softmax_exp, sample_filter=samples_downloaded,
-                        limit=limit, progress_bar=False)
-                    log.info(
-                        f'{len(samples_processed)} new samples processed')
+                        model_dir,
+                        local_raw,
+                        local_pred,
+                        batch_size,
+                        num_workers,
+                        softmax_exp=softmax_exp,
+                        sample_filter=samples_downloaded,
+                        limit=limit,
+                        progress_bar=False,
+                    )
+                    log.info(f"{len(samples_processed)} new samples processed")
                     record.update(samples_processed)
-                    write_record(record, config['local']['sample_record'])
+                    write_record(record, config["local"]["sample_record"])
             if datetime.now() > next_upload:
-                today = datetime.now().strftime('%Y/%m/%d')
+                today = datetime.now().strftime("%Y/%m/%d")
                 todays_upload_record = tuple(upload_record) + (today,)
-                uploaded_raw = upload(todays_upload_record, compression,
-                                      local_raw, raw_prefix, upload_bucket)
-                uploaded_pred = upload(todays_upload_record, compression,
-                                       local_pred, pred_prefix, upload_bucket)
+                uploaded_raw = upload(
+                    todays_upload_record,
+                    compression,
+                    local_raw,
+                    raw_prefix,
+                    upload_bucket,
+                )
+                uploaded_pred = upload(
+                    todays_upload_record,
+                    compression,
+                    local_pred,
+                    pred_prefix,
+                    upload_bucket,
+                )
                 if uploaded_raw != uploaded_pred:
-                    log.warn(f'Upload mismatch: raw {len(uploaded_raw)} samples != '
-                             f'predictions {len(uploaded_pred)} samples')
+                    log.warn(
+                        f"Upload mismatch: raw {len(uploaded_raw)} samples != "
+                        f"predictions {len(uploaded_pred)} samples"
+                    )
                 # Add new days to upload record
                 if uploaded_raw:
                     upload_record.update(uploaded_raw)
                     write_record(
-                        upload_record, config['local']['upload_record'], 'upload-')
+                        upload_record, config["local"]["upload_record"], "upload-"
+                    )
                 # Cleaning up old files
-                remove(local_raw, keep, remove_raw_files, remove_raw_archive,
-                       remove_from_bucket, download_bucket)
+                remove(
+                    local_raw,
+                    keep,
+                    remove_raw_files,
+                    remove_raw_archive,
+                    remove_from_bucket,
+                    download_bucket,
+                )
                 remove(local_pred, keep, remove_pred_files, remove_pred_archive)
                 # Determine next upload time
                 next_upload += timedelta(days=1)
-                log.info(
-                    f'Upload and cleanup done. Next time is {next_upload}')
+                log.info(f"Upload and cleanup done. Next time is {next_upload}")
             else:
                 # Delay next iteration a bit
                 sleep(60)
     except Exception:
-        log.critical('Unhandled exception in service loop', exc_info=True)
+        log.critical("Unhandled exception in service loop", exc_info=True)
 
 
 def check_available(extensions, record, bucket):
-    log.debug('Checking for new samples')
+    log.debug("Checking for new samples")
     # Iterate over object keys in the given bucket, filtering out those that
     # don't end with the correct extensions. Next remove the extensions from
     # the key and add them to a set, which will keep only one name per sample.
     samples = set(
-        obj.key.split('.')[0] for obj in bucket.objects.all()
-        if obj.key.endswith(extensions))
+        obj.key.split(".")[0]
+        for obj in bucket.objects.all()
+        if obj.key.endswith(extensions)
+    )
     # Taking a set difference with record, will return
     # those keys that are only in samples, i.e., they are new.
     new_samples = samples.difference(record)
@@ -126,33 +159,33 @@ def download(samples, extensions, upload_record, local_raw, bucket):
     downloaded_samples = set()
     for sample in samples:
         sample_date = ifcb.sample_to_datetime(sample)
-        day_path = sample_date.strftime('%Y/%m/%d')
+        day_path = sample_date.strftime("%Y/%m/%d")
         if day_path in upload_record:
-            log.warn(
-                f'Downloading {sample}, but {day_path} has already been uploaded')
-        to = local_raw/day_path
+            log.warn(f"Downloading {sample}, but {day_path} has already been uploaded")
+        to = local_raw / day_path
         to.mkdir(exist_ok=True, parents=True)
         try:
             for ext in extensions:
                 obj = sample + ext
-                if not (to/obj).is_file():
-                    log.debug(f'Downloading {bucket.name}/{obj}')
-                    bucket.download_file(obj, str(to/obj))
+                if not (to / obj).is_file():
+                    log.debug(f"Downloading {bucket.name}/{obj}")
+                    bucket.download_file(obj, str(to / obj))
             downloaded_samples.add(sample)
         except ClientError as e:
-            status_code = e.response['ResponseMetadata']['HTTPStatusCode']
+            status_code = e.response["ResponseMetadata"]["HTTPStatusCode"]
             if status_code == 404:
-                log.error(f'Object {obj} not found in {bucket.name}')
+                log.error(f"Object {obj} not found in {bucket.name}")
             else:
-                log.exception(f'While downloading {bucket.name}/{obj}')
+                log.exception(f"While downloading {bucket.name}/{obj}")
                 raise
     return downloaded_samples
 
 
 def upload(upload_record, compression, local_dir, bucket_dir, bucket):
     # 1. Find all day_dirs
-    day_dirs = [d.relative_to(local_dir)
-                for d in sorted(local_dir.glob('*/*/*')) if d.is_dir()]
+    day_dirs = [
+        d.relative_to(local_dir) for d in sorted(local_dir.glob("*/*/*")) if d.is_dir()
+    ]
     # 2. Filter out those days that are in upload record
     day_dirs = [d for d in day_dirs if str(d) not in upload_record]
     uploaded_days = []
@@ -161,19 +194,19 @@ def upload(upload_record, compression, local_dir, bucket_dir, bucket):
         try:
             datetime(*map(int, day_dir.parts[-3:]))
         except Exception:
-            log.error(f'{local_dir/day_dir} is not a valid day directory')
+            log.error(f"{local_dir/day_dir} is not a valid day directory")
             continue
         try:
             # 3. Create day archive
-            archive = create_archive(local_dir/day_dir, compression)
+            archive = create_archive(local_dir / day_dir, compression)
             # 4. Upload archive
-            obj = f'{bucket_dir}/{archive.relative_to(local_dir)}'
-            log.info(f'Uploading {obj} to {bucket.name}')
+            obj = f"{bucket_dir}/{archive.relative_to(local_dir)}"
+            log.info(f"Uploading {obj} to {bucket.name}")
             bucket.upload_file(str(archive), obj)
             # 5. Mark day as successfully uploaded
             uploaded_days.append(str(day_dir))
         except Exception:
-            log.exception(f'While uploading {local_dir/day_dir}')
+            log.exception(f"While uploading {local_dir/day_dir}")
 
     return uploaded_days
 
@@ -181,29 +214,31 @@ def upload(upload_record, compression, local_dir, bucket_dir, bucket):
 def remove(local_dir, keep, files, archive, from_bucket=False, bucket=None):
     removing = []
     if files:
-        removing.append('files')
+        removing.append("files")
     if archive:
-        removing.append('archive')
+        removing.append("archive")
     if from_bucket:
         if not bucket:
-            raise ValueError('Removal bucket not specified')
+            raise ValueError("Removal bucket not specified")
         removing.append(bucket.name)
 
-    archive_suffixes = ['.zip', '.tar', '.tar.gz']
+    archive_suffixes = [".zip", ".tar", ".tar.gz"]
     today = datetime.today()
-    day_dirs = [d for d in sorted(local_dir.glob('*/*/*')) if d.is_dir()]
+    day_dirs = [d for d in sorted(local_dir.glob("*/*/*")) if d.is_dir()]
     for day_dir in day_dirs:
         try:
             date = datetime(*map(int, day_dir.parts[-3:]))
         except Exception:
-            log.error(f'{day_dir} is not a valid day directory')
+            log.error(f"{day_dir} is not a valid day directory")
             continue
         # Check that day is old enough to be removed
         if (today - date).days < keep:
             continue
         day_samples = [path.name for path in day_dir.iterdir()]
-        log.info(f"Removing {day_dir.relative_to(local_dir.parent)} "
-                 f"({' + '.join(removing)})")
+        log.info(
+            f"Removing {day_dir.relative_to(local_dir.parent)} "
+            f"({' + '.join(removing)})"
+        )
         if files:
             shutil.rmtree(day_dir)
         if archive:
@@ -223,24 +258,25 @@ def remove(local_dir, keep, files, archive, from_bucket=False, bucket=None):
 def read_record(file):
     Path(file).touch(exist_ok=True)
     with open(file) as fh:
-        record = set(fh.read().split('\n'))
+        record = set(fh.read().split("\n"))
         # Remove last empty line if it exists in record
-        if '' in record:
-            record.remove('')
+        if "" in record:
+            record.remove("")
     return record
 
 
-def write_record(record, file, prefix=''):
-    log.debug(f'Writing {prefix}record ({len(record)} items)')
-    with open(file, 'w') as fh:
+def write_record(record, file, prefix=""):
+    log.debug(f"Writing {prefix}record ({len(record)} items)")
+    with open(file, "w") as fh:
         for item in sorted(record):
-            fh.write(item + '\n')
+            fh.write(item + "\n")
 
 
 def delete_many_from_bucket(objects, bucket):
     response = bucket.delete_objects(
-        Delete={'Objects': [{'Key': key} for key in objects]})
-    status_code = response['ResponseMetadata']['HTTPStatusCode']
+        Delete={"Objects": [{"Key": key} for key in objects]}
+    )
+    status_code = response["ResponseMetadata"]["HTTPStatusCode"]
     if status_code != 200:
-        raise HTTPError(f's3 client returned status code {status_code}')
+        raise HTTPError(f"s3 client returned status code {status_code}")
     # Apparently there is no way to confirm which objects were actually deleted
