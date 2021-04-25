@@ -13,6 +13,7 @@ from requests import HTTPError
 from sykepic.utils import ifcb, logger
 from sykepic.utils.files import create_archive
 
+from . import biovolume
 from .predict import predict
 
 log = logging.getLogger("sync")
@@ -22,7 +23,9 @@ def main(args):
     # Parse config file and set up
     config = ConfigParser()
     config.read(args.config)
+    # Logging
     logger.setup(config["logging"]["config"])
+    # Local, Download
     s3 = boto3.resource("s3", endpoint_url=config["download"]["endpoint_url"])
     record = read_record(config["local"]["sample_record"])
     sample_extensions = tuple(
@@ -33,6 +36,9 @@ def main(args):
     local_raw.mkdir(parents=True, exist_ok=True)
     local_pred = Path(config["local"]["predictions"])
     local_pred.mkdir(parents=True, exist_ok=True)
+    local_biovol = Path(config["local"]["biovolumes"])
+    local_biovol.mkdir(parents=True, exist_ok=True)
+    # Predict
     model_dir = Path(config["predict"]["model"])
     if not model_dir.is_dir():
         raise OSError(f"Model directory '{model_dir} not found'")
@@ -42,6 +48,12 @@ def main(args):
     limit = int(limit) if limit not in ["", None] else None
     softmax_exp = config["predict"]["softmax_exp"]
     softmax_exp = float(softmax_exp) if softmax_exp not in ["", None] else None
+    # Biovolume
+    matlab_bin = config["biovolume"]["matlab_bin"]
+    symb_raw = config["biovolume"]["raw_symbolic"]
+    blobs = Path(config["biovolume"]["blobs_dir"])
+    features = Path(config["biovolume"]["features_dir"])
+    # Upload
     upload_time = datetime.strptime(config["upload"]["time"], "%H:%M")
     next_upload = datetime.now().replace(
         hour=upload_time.hour, minute=upload_time.minute, second=0, microsecond=0
@@ -50,13 +62,19 @@ def main(args):
     upload_bucket = s3.Bucket(config["upload"]["bucket"])
     raw_prefix = config["upload"]["raw_prefix"]
     pred_prefix = config["upload"]["predictions_prefix"]
+    biovol_prefix = config["upload"]["biovolumes_prefix"]
     compression = config["upload"]["compression"]
+    # Remove
+    keep = config.getint("remove", "keep")
     remove_raw_files = config.getboolean("remove", "raw_files")
     remove_pred_files = config.getboolean("remove", "prediction_files")
+    remove_biovol_files = config.getboolean("remove", "biovolume_files")
     remove_raw_archive = config.getboolean("remove", "raw_archive")
     remove_pred_archive = config.getboolean("remove", "prediction_archive")
+    remove_biovol_archive = config.getboolean("remove", "biovolume_archive")
     remove_from_bucket = config.getboolean("remove", "from_download_bucket")
-    keep = config.getint("remove", "keep")
+    remove_blobs = config.getboolean("remove", "old_blobs")
+    remove_features = config.getboolean("remove", "old_features")
 
     # Start service loop
     log.info("Synchronization service started")
@@ -103,8 +121,22 @@ def main(args):
                         limit=limit,
                         progress_bar=False,
                     )
-                    log.info(f"{len(samples_processed)} new samples processed")
+                    log.debug(
+                        f"Calculating biovolumes for {len(samples_predicted)} samples"
+                    )
+                    samples_processed = biovolume.main(
+                        matlab_bin,
+                        samples_predicted,
+                        sample_extensions,
+                        local_raw,
+                        symb_raw,
+                        blobs,
+                        features,
+                        local_biovol,
+                    )
                     record.update(samples_processed)
+                    for sample in samples_processed:
+                        log.debug(f"{sample} processed")
                     write_record(record, config["local"]["sample_record"])
             if datetime.now() > next_upload:
                 today = datetime.now().strftime("%Y/%m/%d")
@@ -123,10 +155,18 @@ def main(args):
                     pred_prefix,
                     upload_bucket,
                 )
-                if uploaded_raw != uploaded_pred:
+                uploaded_biovol = upload(
+                    todays_upload_record,
+                    compression,
+                    local_biovol,
+                    biovol_prefix,
+                    upload_bucket,
+                )
+                if uploaded_raw != uploaded_pred != uploaded_biovol:
                     log.warn(
-                        f"Upload mismatch: raw {len(uploaded_raw)} samples != "
-                        f"predictions {len(uploaded_pred)} samples"
+                        f"Upload mismatch: raw {len(uploaded_raw)}, "
+                        f"predictions {len(uploaded_pred)}, "
+                        f"biovolumes {len(uploaded_biovol)}"
                     )
                 # Add new days to upload record
                 if uploaded_raw:
@@ -144,12 +184,20 @@ def main(args):
                     download_bucket,
                 )
                 remove(local_pred, keep, remove_pred_files, remove_pred_archive)
+                remove(local_biovol, keep, remove_biovol_files, remove_biovol_archive)
+                # Remove blobs and features
+                if remove_blobs and blobs.is_dir():
+                    log.info("Removing old blobs")
+                    shutil.rmtree(blobs)
+                if remove_features and features.is_dir():
+                    log.info("Removing old features")
+                    shutil.rmtree(features)
                 # Determine next upload time
                 next_upload += timedelta(days=1)
                 log.info(f"Upload and cleanup done. Next time is {next_upload}")
             else:
                 # Delay next iteration a bit
-                sleep(60)
+                sleep(120)
     except Exception:
         log.critical("Unhandled exception in service loop", exc_info=True)
 
@@ -254,7 +302,7 @@ def remove(local_dir, keep, files, archive, from_bucket=False, bucket=None):
         day_samples = [path.name for path in day_dir.iterdir()]
         log.info(
             f"Removing {day_dir.relative_to(local_dir.parent)} "
-            f"({' + '.join(removing)})"
+            f"({', '.join(removing)})"
         )
         if files:
             shutil.rmtree(day_dir)
