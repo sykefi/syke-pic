@@ -67,7 +67,7 @@ def main(args):
             )
             log.debug(f"{len(samples_available)} samples available")
             if samples_available:
-                samples_downloaded = download(
+                samples_downloaded, late_record = download(
                     samples_available,
                     sample_extensions,
                     upload_record,
@@ -75,9 +75,24 @@ def main(args):
                     download_bucket,
                 )
                 log.debug(f"{len(samples_downloaded)} samples downloaded")
+                # Check for samples arriving after their day has already been uploaded.
+                # If their day directory hasn't been removed yet, these days can be re-uploaded.
+                today = datetime.today()
+                for day_path in late_record:
+                    if (today - datetime.strptime(day_path, "%Y/%m/%d")).days < keep:
+                        log.info(
+                            f"{day_path} will be re-uploaded with late arriving samples"
+                        )
+                        upload_record.remove(day_path)
+                    else:
+                        log.warn(
+                            f"{day_path} can't be re-uploaded, since it's older than {keep} days"
+                        )
                 if samples_downloaded:
-                    log.debug("Running predictions")
-                    samples_processed = predict(
+                    log.debug(
+                        f"Making predictions for {len(samples_downloaded)} samples"
+                    )
+                    samples_predicted = predict(
                         model_dir,
                         local_raw,
                         local_pred,
@@ -157,11 +172,13 @@ def check_available(extensions, record, bucket):
 
 def download(samples, extensions, upload_record, local_raw, bucket):
     downloaded_samples = set()
+    late_record = set()
     for sample in samples:
         sample_date = ifcb.sample_to_datetime(sample)
         day_path = sample_date.strftime("%Y/%m/%d")
         if day_path in upload_record:
             log.warn(f"Downloading {sample}, but {day_path} has already been uploaded")
+            late_record.add(day_path)
         to = local_raw / day_path
         to.mkdir(exist_ok=True, parents=True)
         try:
@@ -178,7 +195,7 @@ def download(samples, extensions, upload_record, local_raw, bucket):
             else:
                 log.exception(f"While downloading {bucket.name}/{obj}")
                 raise
-    return downloaded_samples
+    return downloaded_samples, late_record
 
 
 def upload(upload_record, compression, local_dir, bucket_dir, bucket):
