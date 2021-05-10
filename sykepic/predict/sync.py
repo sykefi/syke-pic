@@ -48,11 +48,6 @@ def main(args):
     limit = int(limit) if limit not in ["", None] else None
     softmax_exp = config["predict"]["softmax_exp"]
     softmax_exp = float(softmax_exp) if softmax_exp not in ["", None] else None
-    # Biovolume
-    matlab_bin = config["biovolume"]["matlab_bin"]
-    symb_raw = config["biovolume"]["raw_symbolic"]
-    blobs = Path(config["biovolume"]["blobs_dir"])
-    features = Path(config["biovolume"]["features_dir"])
     # Upload
     upload_time = datetime.strptime(config["upload"]["time"], "%H:%M")
     next_upload = datetime.now().replace(
@@ -73,8 +68,6 @@ def main(args):
     remove_pred_archive = config.getboolean("remove", "prediction_archive")
     remove_biovol_archive = config.getboolean("remove", "biovolume_archive")
     remove_from_bucket = config.getboolean("remove", "from_download_bucket")
-    remove_blobs = config.getboolean("remove", "old_blobs")
-    remove_features = config.getboolean("remove", "old_features")
 
     # Start service loop
     log.info("Synchronization service started")
@@ -94,7 +87,8 @@ def main(args):
                 )
                 log.debug(f"{len(samples_downloaded)} samples downloaded")
                 # Check for samples arriving after their day has already been uploaded.
-                # If their day directory hasn't been removed yet, these days can be re-uploaded.
+                # If their day directory hasn't been removed yet,
+                # these days can be re-uploaded.
                 today = datetime.today()
                 for day_path in late_record:
                     if (today - datetime.strptime(day_path, "%Y/%m/%d")).days < keep:
@@ -104,7 +98,8 @@ def main(args):
                         upload_record.remove(day_path)
                     else:
                         log.warn(
-                            f"{day_path} can't be re-uploaded, since it's older than {keep} days"
+                            f"{day_path} can't be re-uploaded, "
+                            "since it's older than {keep} days"
                         )
                 if samples_downloaded:
                     log.debug(
@@ -124,14 +119,9 @@ def main(args):
                     log.debug(
                         f"Calculating biovolumes for {len(samples_predicted)} samples"
                     )
-                    samples_processed = biovolume.main(
-                        matlab_bin,
+                    samples_processed = biovolume.with_python(
                         samples_predicted,
-                        sample_extensions,
                         local_raw,
-                        symb_raw,
-                        blobs,
-                        features,
                         local_biovol,
                     )
                     record.update(samples_processed)
@@ -185,13 +175,6 @@ def main(args):
                 )
                 remove(local_pred, keep, remove_pred_files, remove_pred_archive)
                 remove(local_biovol, keep, remove_biovol_files, remove_biovol_archive)
-                # Remove blobs and features
-                if remove_blobs and blobs.is_dir():
-                    log.info("Removing old blobs")
-                    shutil.rmtree(blobs)
-                if remove_features and features.is_dir():
-                    log.info("Removing old features")
-                    shutil.rmtree(features)
                 # Determine next upload time
                 next_upload += timedelta(days=1)
                 log.info(f"Upload and cleanup done. Next time is {next_upload}")

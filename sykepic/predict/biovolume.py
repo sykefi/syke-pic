@@ -1,15 +1,40 @@
 import logging
 import shutil
 import subprocess
-import sys
 from pathlib import Path
+
+from ifcb_features import compute_features
 
 from sykepic.utils import ifcb
 
 log = logging.getLogger("biovolume")
 
 
-def main(
+def with_python(raw_dir, out_dir, samples=None):
+    raw_dir = Path(raw_dir)
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    adc_files = raw_dir.glob("**/*.adc")
+    if samples:
+        adc_files = [adc for adc in adc_files if adc.stem in samples]
+    for adc_file in sorted(adc_files):
+        log.debug(f"Extracting features for {adc_file.stem}")
+        print(f"Extracting features for {adc_file.stem}")
+        roi_file = adc_file.with_suffix(".roi")
+        output = "roi,area,biovolume\n"
+        for roi_id, roi_array in ifcb.raw_to_numpy(adc_file, roi_file):
+            _, roi_features = compute_features(roi_array)
+            roi_features = dict(roi_features)
+            # breakpoint()
+            output += ",".join(
+                map(str, [roi_id, roi_features["Area"], roi_features["Biovolume"]])
+            )
+            output += "\n"
+        with open(out_dir / f"{adc_file.stem}.csv", "w") as fh:
+            fh.write(output)
+
+
+def with_matlab(
     matlab_bin, samples, extensions, raw_orig, raw_symb, blobs, features, biovolumes
 ):
     raw_orig = Path(raw_orig)

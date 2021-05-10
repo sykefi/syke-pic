@@ -1,11 +1,14 @@
 """Functions for handling data from Imaging FlowCytobot (IFCB)."""
 
 import datetime
+import logging
 import re
 from pathlib import Path
 
 import cv2
 import numpy as np
+
+log = logging.getLogger("ifcb")
 
 
 def sample_to_datetime(sample):
@@ -115,3 +118,33 @@ def raw_to_png(adc, roi, out_dir=None, limit=None, exist_ok=False):
                 #     log_fh.write(f'{adc.name}: line {i}: {e}\n')
             if limit and i >= limit:
                 break
+
+
+def raw_to_numpy(adc, roi):
+    adc = Path(adc)
+    try:
+        # Read bytes from .roi-file into 8-bit integers
+        roi_data = np.fromfile(roi, dtype="uint8")
+        # Parse each line of .adc-file
+        with adc.open() as adc_fh:
+            for i, adc_line in enumerate(adc_fh, start=1):
+                np_arr = next_roi(roi_data, adc_line)
+                if np_arr is not None:
+                    yield i, np_arr
+    except Exception:
+        log.exception("While converting raw to numpy for {adc.stem}")
+
+
+def next_roi(roi_data, adc_line):
+    adc_line = adc_line.split(",")
+    roi_x = int(adc_line[15])  # ROI width
+    roi_y = int(adc_line[16])  # ROI height
+    # Skip empty roi
+    if roi_x < 1 or roi_y < 1:
+        return None
+    # roi_data is a 1-dimensional array, where
+    # all roi are stacked one after another.
+    start = int(adc_line[17])  # start byte
+    end = start + (roi_x * roi_y)
+    # Reshape into 2-dimensions
+    return roi_data[start:end].reshape((roi_y, roi_x))
