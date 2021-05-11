@@ -1,0 +1,6 @@
+dependencies:
+  - scikit-image
+  - pip
+  - pip:
+      - phasepack
+      - pyfftw
