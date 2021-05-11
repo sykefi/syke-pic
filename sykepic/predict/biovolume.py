@@ -20,18 +20,26 @@ def with_python(raw_dir, out_dir, samples=None):
     for adc_file in sorted(adc_files):
         log.debug(f"Extracting features for {adc_file.stem}")
         print(f"Extracting features for {adc_file.stem}")
+        sample_csv = (
+            out_dir
+            / ifcb.sample_to_datetime(adc_file.stem).strftime("%Y/%m/%d")
+            / f"{adc_file.stem}.csv"
+        )
+        if sample_csv.is_file():
+            log.info(f"{sample_csv} already exists, skipping")
+            print(f"{sample_csv} already exists, skipping")
+            continue
+        sample_csv.parent.mkdir(parents=True, exist_ok=True)
         roi_file = adc_file.with_suffix(".roi")
-        output = "roi,area,biovolume\n"
+        csv_content = "roi,area,biovolume\n"
         for roi_id, roi_array in ifcb.raw_to_numpy(adc_file, roi_file):
             _, roi_features = compute_features(roi_array)
             roi_features = dict(roi_features)
-            # breakpoint()
-            output += ",".join(
+            csv_content += ",".join(
                 map(str, [roi_id, roi_features["Area"], roi_features["Biovolume"]])
-            )
-            output += "\n"
-        with open(out_dir / f"{adc_file.stem}.csv", "w") as fh:
-            fh.write(output)
+            ) + "\n"
+        with open(sample_csv, "w") as fh:
+            fh.write(csv_content)
 
 
 def with_matlab(
