@@ -1,7 +1,9 @@
 import logging
+import os
 import shutil
 import subprocess
 from pathlib import Path
+from multiprocessing import Pool
 
 from ifcb_features import compute_features
 
@@ -10,36 +12,49 @@ from sykepic.utils import ifcb
 log = logging.getLogger("biovolume")
 
 
-def with_python(raw_dir, out_dir, samples=None):
+def with_python(raw_dir, out_dir, samples=None, parallel=False):
     raw_dir = Path(raw_dir)
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
-    adc_files = raw_dir.glob("**/*.adc")
+    adc_files = sorted(raw_dir.glob("**/*.adc"))
     if samples:
         adc_files = [adc for adc in adc_files if adc.stem in samples]
-    for adc_file in sorted(adc_files):
-        log.debug(f"Extracting features for {adc_file.stem}")
-        print(f"Extracting features for {adc_file.stem}")
-        sample_csv = (
-            out_dir
-            / ifcb.sample_to_datetime(adc_file.stem).strftime("%Y/%m/%d")
-            / f"{adc_file.stem}.csv"
-        )
-        if sample_csv.is_file():
-            log.info(f"{sample_csv} already exists, skipping")
-            print(f"{sample_csv} already exists, skipping")
-            continue
-        sample_csv.parent.mkdir(parents=True, exist_ok=True)
-        roi_file = adc_file.with_suffix(".roi")
-        csv_content = "roi,area,biovolume\n"
-        for roi_id, roi_array in ifcb.raw_to_numpy(adc_file, roi_file):
-            _, roi_features = compute_features(roi_array)
-            roi_features = dict(roi_features)
-            csv_content += ",".join(
+    if parallel:
+        available_cores = os.cpu_count()
+        print(f"Extracting features in parallel with {available_cores} cores")
+        with Pool(available_cores) as pool:
+            pool.starmap(process_sample, [(adc, out_dir) for adc in adc_files])
+    else:
+        print(f"Extracting features synchronously")
+        for adc in sorted(adc_files):
+            process_sample(adc, out_dir)
+
+
+def process_sample(adc_file, out_dir):
+    print(f"Extracting features for {adc_file.stem}")
+    sample_csv = (
+        out_dir
+        / ifcb.sample_to_datetime(adc_file.stem).strftime("%Y/%m/%d")
+        / f"{adc_file.stem}.csv"
+    )
+    if sample_csv.is_file():
+        print(f"{sample_csv} already exists, skipping")
+        return
+    sample_csv.parent.mkdir(parents=True, exist_ok=True)
+    roi_file = adc_file.with_suffix(".roi")
+    csv_content = "roi,area,biovolume\n"
+    for roi_id, roi_array in ifcb.raw_to_numpy(adc_file, roi_file):
+        _, roi_features = compute_features(roi_array)
+        roi_features = dict(roi_features)
+        # Create a CSV entry for current ROI and append it to the sample's output
+        csv_content += (
+            ",".join(
                 map(str, [roi_id, roi_features["Area"], roi_features["Biovolume"]])
-            ) + "\n"
-        with open(sample_csv, "w") as fh:
-            fh.write(csv_content)
+            )
+            + "\n"
+        )
+    with open(sample_csv, "w") as fh:
+        fh.write(csv_content)
 
 
 def with_matlab(
