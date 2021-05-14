@@ -48,6 +48,9 @@ def main(args):
     limit = int(limit) if limit not in ["", None] else None
     softmax_exp = config["predict"]["softmax_exp"]
     softmax_exp = float(softmax_exp) if softmax_exp not in ["", None] else None
+    # Features
+    feat_parallel = config.getboolean("features", "parallel")
+    feat_force = config.getboolean("features", "force")
     # Upload
     upload_time = datetime.strptime(config["upload"]["time"], "%H:%M")
     next_upload = datetime.now().replace(
@@ -117,16 +120,18 @@ def main(args):
                         progress_bar=False,
                     )
                     log.debug(
-                        f"Calculating biovolumes for {len(samples_predicted)} samples"
+                        f"Extracting features for {len(samples_predicted)} samples"
                     )
-                    samples_processed = biovolume.with_python(
-                        samples_predicted,
+                    samples_processed = biovolume.main(
                         local_raw,
                         local_biovol,
+                        sample_filter=samples_predicted,
+                        parallel=feat_parallel,
+                        force=feat_force,
                     )
                     record.update(samples_processed)
                     for sample in samples_processed:
-                        log.debug(f"{sample} processed")
+                        log.info(f"{sample} processed")
                     write_record(record, config["local"]["sample_record"])
             if datetime.now() > next_upload:
                 today = datetime.now().strftime("%Y/%m/%d")
