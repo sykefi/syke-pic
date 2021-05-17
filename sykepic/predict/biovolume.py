@@ -36,7 +36,7 @@ def process_sample(sample_path, out_dir, force=False):
     csv_path = (
         Path(out_dir)
         / ifcb.sample_to_datetime(sample).strftime("%Y/%m/%d")
-        / f"{sample}_feat.csv"
+        / f"{sample}.feat.csv"
     )
     if csv_path.is_file():
         if force:

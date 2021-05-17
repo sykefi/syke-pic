@@ -142,6 +142,7 @@ def main(args):
                     local_raw,
                     raw_prefix,
                     upload_bucket,
+                    suffix=".raw",
                 )
                 uploaded_pred = upload(
                     todays_upload_record,
@@ -149,6 +150,7 @@ def main(args):
                     local_pred,
                     pred_prefix,
                     upload_bucket,
+                    suffix=".prob",
                 )
                 uploaded_biovol = upload(
                     todays_upload_record,
@@ -156,6 +158,7 @@ def main(args):
                     local_biovol,
                     biovol_prefix,
                     upload_bucket,
+                    suffix=".feat",
                 )
                 if uploaded_raw != uploaded_pred != uploaded_biovol:
                     log.warn(
@@ -234,7 +237,7 @@ def download(samples, extensions, upload_record, local_raw, bucket):
     return downloaded_samples, late_record
 
 
-def upload(upload_record, compression, local_dir, bucket_dir, bucket):
+def upload(upload_record, compression, local_dir, bucket_dir, bucket, suffix=None):
     # 1. Find all day_dirs
     day_dirs = [
         d.relative_to(local_dir) for d in sorted(local_dir.glob("*/*/*")) if d.is_dir()
@@ -251,7 +254,12 @@ def upload(upload_record, compression, local_dir, bucket_dir, bucket):
             continue
         try:
             # 3. Create day archive
-            archive = create_archive(local_dir / day_dir, compression)
+            # Archive path: local_dir/yyyy/mm/yyyymmdd[.suffix].compression
+            archive = local_dir / day_dir.parent / f"{''.join(day_dir.parts[-3:])}"
+            if suffix:
+                archive = archive.with_suffix(suffix)
+            archive = archive.with_suffix(f".{compression}")
+            create_archive(local_dir / day_dir, archive, compression)
             # 4. Upload archive
             obj = f"{bucket_dir}/{archive.relative_to(local_dir)}"
             log.info(f"Uploading {obj} to {bucket.name}")
@@ -287,18 +295,20 @@ def remove(local_dir, keep, files, archive, from_bucket=False, bucket=None):
         # Check that day is old enough to be removed
         if (today - date).days < keep:
             continue
-        day_samples = [path.name for path in day_dir.iterdir()]
         log.info(
             f"Removing {day_dir.relative_to(local_dir.parent)} "
             f"({', '.join(removing)})"
         )
+        day_samples = [path.name for path in day_dir.iterdir()]
         if files:
             shutil.rmtree(day_dir)
         if archive:
-            for suffix in archive_suffixes:
-                day_archive = day_dir.with_suffix(suffix)
-                if day_archive.is_file():
-                    day_archive.unlink()
+            for path in day_dir.parent.iterdir():
+                if (
+                    path.stem.starswith("".join(day_dir.parts[-3:]))
+                    and path.suffix in archive_suffixes
+                ):
+                    path.unlink()
             # Remove month directory if it's empty
             try:
                 day_dir.parent.rmdir()

@@ -56,7 +56,7 @@ def predict(
             continue
         sample_date = ifcb.sample_to_datetime(sample)
         day_path = sample_date.strftime("%Y/%m/%d")
-        csv = Path(out_dir) / day_path / (adc.with_suffix(".csv").name)
+        csv = Path(out_dir) / day_path / f"{adc.stem}.prob.csv"
         samples.append((adc, csv))
 
     if not samples:
