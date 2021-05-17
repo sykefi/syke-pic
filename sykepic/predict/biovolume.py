@@ -59,7 +59,6 @@ def sample_features(sample_path):
         log.exception(f"Unable to calculate sample volume for {root.name}")
         return
     roi_features = []
-    i = 0
     for roi_id, roi_array in ifcb.raw_to_numpy(adc, roi):
         _, all_roi_features = compute_features(roi_array)
         all_roi_features = dict(all_roi_features)
@@ -67,9 +66,6 @@ def sample_features(sample_path):
         biovol_um3 = pixels_to_um3(biovol_px)
         biomass_ugl = biovolume_to_biomass(biovol_um3, volume_ml)
         roi_features.append((roi_id, biovol_px, biovol_um3, biomass_ugl))
-        i += 1
-        if i > 20:
-            break
     return (volume_ml, roi_features)
 
 
