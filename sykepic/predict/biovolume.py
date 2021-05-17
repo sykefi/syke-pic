@@ -1,12 +1,11 @@
-import logging
 import os
 from multiprocessing import Pool
 from pathlib import Path
 
 from ifcb_features import compute_features
-from sykepic.utils import ifcb
+from sykepic.utils import ifcb, logger
 
-log = logging.getLogger("biovolume")
+log = logger.get_logger("biovolume")
 
 
 def main(raw_dir, out_dir, sample_filter=None, parallel=False, force=False):
@@ -19,13 +18,13 @@ def main(raw_dir, out_dir, sample_filter=None, parallel=False, force=False):
         sample_paths = (path for path in sample_paths if path.name in sample_filter)
     if parallel:
         available_cores = os.cpu_count()
-        print(f"Extracting features in parallel with {available_cores} cores")
+        log.debug(f"Extracting features in parallel with {available_cores} cores")
         with Pool(available_cores) as pool:
             pool.starmap(
                 process_sample, [(path, out_dir, force) for path in sample_paths]
             )
     else:
-        print("Extracting features synchronously")
+        log.debug("Extracting features synchronously")
         for path in sorted(sample_paths):
             process_sample(path, out_dir, force)
 
@@ -40,11 +39,11 @@ def process_sample(sample_path, out_dir, force=False):
     )
     if csv_path.is_file():
         if force:
-            print(f"{csv_path.name} already exists, overwriting")
+            log.warn(f"{csv_path.name} already exists, overwriting")
         else:
-            print(f"{csv_path.name} already exists, skipping")
+            log.warn(f"{csv_path.name} already exists, skipping")
             return
-    print(f"Extracting features for {sample}")
+    log.debug(f"Extracting features for {sample}")
     volume_ml, roi_features = sample_features(sample_path)
     features_to_csv(volume_ml, roi_features, csv_path)
 
@@ -57,9 +56,10 @@ def sample_features(sample_path):
     try:
         volume_ml = sample_volume(hdr)
     except Exception:
-        print(f"Unable to calculate sample volume for {root.name}")
+        log.exception(f"Unable to calculate sample volume for {root.name}")
         return
     roi_features = []
+    i = 0
     for roi_id, roi_array in ifcb.raw_to_numpy(adc, roi):
         _, all_roi_features = compute_features(roi_array)
         all_roi_features = dict(all_roi_features)
@@ -67,6 +67,9 @@ def sample_features(sample_path):
         biovol_um3 = pixels_to_um3(biovol_px)
         biomass_ugl = biovolume_to_biomass(biovol_um3, volume_ml)
         roi_features.append((roi_id, biovol_px, biovol_um3, biomass_ugl))
+        i += 1
+        if i > 20:
+            break
     return (volume_ml, roi_features)
 
 

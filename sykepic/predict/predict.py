@@ -1,6 +1,5 @@
 """This module contains the main logic for model inference."""
 
-import logging
 import shutil
 from configparser import ConfigParser
 from pathlib import Path
@@ -11,11 +10,11 @@ from torch.nn import functional as F
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
-from sykepic.utils import ifcb
+from sykepic.utils import ifcb, logger
 from sykepic.train.config import get_img_shape, get_transforms, get_network
 from sykepic.train.data import ImageDataset
 
-log = logging.getLogger("predict")
+log = logger.get_logger("predict")
 
 
 def main(args):

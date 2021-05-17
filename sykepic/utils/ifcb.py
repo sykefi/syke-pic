@@ -1,14 +1,15 @@
 """Functions for handling data from Imaging FlowCytobot (IFCB)."""
 
 import datetime
-import logging
 import re
 from pathlib import Path
 
 import cv2
 import numpy as np
 
-log = logging.getLogger("ifcb")
+from . import logger
+
+log = logger.get_logger("ifcb")
 
 
 def sample_to_datetime(sample):
@@ -58,7 +59,7 @@ def extract_sample_images(sample, raw_dir, out_dir, exist_ok=False):
     try:
         adc = next(Path(raw_dir).glob(f"**/{sample}.adc"))
     except StopIteration:
-        print(f"[ERROR] Sample '{sample}' not found in '{raw_dir}'")
+        log.error(f"Sample {sample} not found in {raw_dir}")
         raise
     roi = adc.with_suffix(".roi")
     raw_to_png(adc, roi, out_dir, exist_ok=exist_ok)
@@ -113,7 +114,7 @@ def raw_to_png(adc, roi, out_dir=None, limit=None, exist_ok=False):
                 # imwrite reshapes automatically to 3-dimensions (RGB)
                 cv2.imwrite(str(img_path), img)
             except Exception as e:
-                print(f"[ERROR] {adc.name} line {i}: {e}")
+                log.exception(f"{adc.name} line {i}: {e}")
                 # with open(out_dir/'errors.log', 'a') as log_fh:
                 #     log_fh.write(f'{adc.name}: line {i}: {e}\n')
             if limit and i >= limit:

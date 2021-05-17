@@ -1,6 +1,5 @@
 """Module for synchronising local data with Allas"""
 
-import logging
 import shutil
 from configparser import ConfigParser
 from datetime import datetime, timedelta
@@ -16,7 +15,7 @@ from sykepic.utils.files import create_archive
 from . import biovolume
 from .predict import predict
 
-log = logging.getLogger("sync")
+log = logger.get_logger("sync")
 
 
 def main(args):
