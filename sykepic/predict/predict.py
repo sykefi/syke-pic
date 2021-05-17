@@ -14,7 +14,7 @@ from sykepic.utils import ifcb, logger
 from sykepic.train.config import get_img_shape, get_transforms, get_network
 from sykepic.train.data import ImageDataset
 
-log = logger.get_logger("predict")
+log = logger.get_logger("prob")
 
 
 def main(args):
@@ -88,16 +88,16 @@ def predict(
         sample = adc.with_suffix("").name
         log.debug(f"Predicting {sample}")
         if not force and csv.is_file():
-            log.error(f"{csv.name} already exists, skipping")
+            log.warn(f"{csv.name} already exists, skipping")
             predicted_samples.add(sample)
             continue
-        img_dir = f"{csv.with_suffix('')}_images"
+        img_dir = f"{adc.with_suffix('')}_images"
         roi = adc.with_suffix(".roi")
         try:
             try:
                 ifcb.raw_to_png(adc, roi, out_dir=img_dir)
             except FileExistsError:
-                log.error(f"Images already extracted for '{sample}'")
+                log.warn(f"Images already extracted for {sample}")
             img_paths = sorted(Path(img_dir).glob("**/*.png"))
             dataset = ImageDataset(
                 img_paths, transform=eval_transform, num_chans=img_shape[0]
@@ -114,7 +114,7 @@ def predict(
                     data += ",".join(f"{p:.5f}" for p in probs)
                 fh.write(data)
         except Exception:
-            log.exception("While predicting '{sample}'")
+            log.exception("While predicting {sample}")
             raise
         finally:
             # Remove extracted images even in case of exception

@@ -1,11 +1,11 @@
 import os
-from multiprocessing import Pool
+from multiprocessing import Pool, get_context
 from pathlib import Path
 
 from ifcb_features import compute_features
 from sykepic.utils import ifcb, logger
 
-log = logger.get_logger("biovolume")
+log = logger.get_logger("feat")
 
 
 def main(raw_dir, out_dir, sample_filter=None, parallel=False, force=False):
@@ -14,19 +14,21 @@ def main(raw_dir, out_dir, sample_filter=None, parallel=False, force=False):
     out_dir.mkdir(parents=True, exist_ok=True)
     # Not sorting the samples, so that each cpu gets them from random timestamps
     sample_paths = (roi.with_suffix("") for roi in raw_dir.glob("**/*.roi"))
-    if sample_filter:
+    if sample_filter is not None:
         sample_paths = (path for path in sample_paths if path.name in sample_filter)
     if parallel:
         available_cores = os.cpu_count()
         log.debug(f"Extracting features in parallel with {available_cores} cores")
-        with Pool(available_cores) as pool:
-            pool.starmap(
+        with get_context("spawn").Pool(available_cores) as pool:
+            samples_processed = pool.starmap(
                 process_sample, [(path, out_dir, force) for path in sample_paths]
             )
     else:
         log.debug("Extracting features synchronously")
+        samples_processed = []
         for path in sorted(sample_paths):
-            process_sample(path, out_dir, force)
+            samples_processed.append(process_sample(path, out_dir, force))
+    return set(filter(None, samples_processed))
 
 
 def process_sample(sample_path, out_dir, force=False):
@@ -39,13 +41,17 @@ def process_sample(sample_path, out_dir, force=False):
     )
     if csv_path.is_file():
         if force:
-            log.warn(f"{csv_path.name} already exists, overwriting")
+            print(f"[WARNING] {csv_path.name} already exists, overwriting")
+            # log.warn(f"{csv_path.name} already exists, overwriting")
         else:
-            log.warn(f"{csv_path.name} already exists, skipping")
-            return
-    log.debug(f"Extracting features for {sample}")
+            print(f"[WARNING] {csv_path.name} already exists, skipping")
+            # log.warn(f"{csv_path.name} already exists, skipping")
+            return sample_path.name
+    # log.debug(f"Extracting features for {sample}")
+    # print(f"Extracting features for {sample}")
     volume_ml, roi_features = sample_features(sample_path)
     features_to_csv(volume_ml, roi_features, csv_path)
+    return sample_path.name
 
 
 def sample_features(sample_path):
