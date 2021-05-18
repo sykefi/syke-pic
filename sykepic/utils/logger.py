@@ -7,7 +7,9 @@ import yaml
 
 SETUP_RAN = False
 
-logging.getLogger('s3transfer').setLevel(logging.CRITICAL)
+# Hide debug logs for this external module
+logging.getLogger("s3transfer").setLevel(logging.CRITICAL)
+
 
 def get_logger(name):
     global SETUP_RAN

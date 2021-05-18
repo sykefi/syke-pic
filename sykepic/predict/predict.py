@@ -56,6 +56,7 @@ def predict(
         sample_date = ifcb.sample_to_datetime(sample)
         day_path = sample_date.strftime("%Y/%m/%d")
         csv = Path(out_dir) / day_path / f"{adc.stem}.prob.csv"
+        csv.parent.mkdir(parents=True, exist_ok=True)
         samples.append((adc, csv))
 
     if not samples:
@@ -114,7 +115,7 @@ def predict(
                     data += ",".join(f"{p:.5f}" for p in probs)
                 fh.write(data)
         except Exception:
-            log.exception("While predicting {sample}")
+            log.exception(f"While predicting {sample}")
             raise
         finally:
             # Remove extracted images even in case of exception

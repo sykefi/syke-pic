@@ -61,6 +61,8 @@ def sample_features(sample_path):
     roi = root.with_suffix(".roi")
     try:
         volume_ml = sample_volume(hdr)
+        if volume_ml <= 0:
+            log.warn(f"{root.name} volume_ml is {volume_ml}")
     except Exception:
         log.exception(f"Unable to calculate sample volume for {root.name}")
         return
@@ -94,7 +96,10 @@ def pixels_to_um3(pixels, micron_factor=3.5):
 
 
 def biovolume_to_biomass(biovol_um3, volume_ml):
-    return biovol_um3 / volume_ml / 1000
+    try:
+        return biovol_um3 / volume_ml / 1000
+    except ZeroDivisionError:
+        return 0
 
 
 def features_to_csv(volume_ml, roi_features, csv_path):
