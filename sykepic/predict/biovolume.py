@@ -73,7 +73,20 @@ def sample_features(sample_path):
         biovol_px = all_roi_features["Biovolume"]
         biovol_um3 = pixels_to_um3(biovol_px)
         biomass_ugl = biovolume_to_biomass(biovol_um3, volume_ml)
-        roi_features.append((roi_id, biovol_px, biovol_um3, biomass_ugl))
+        area = all_roi_features["Area"]
+        major_axis_length = all_roi_features["MajorAxisLength"]
+        minor_axis_length = all_roi_features["MinorAxisLength"]
+        roi_features.append(
+            (
+                roi_id,
+                biovol_px,
+                biovol_um3,
+                biomass_ugl,
+                area,
+                major_axis_length,
+                minor_axis_length,
+            )
+        )
     return (volume_ml, roi_features)
 
 
@@ -107,7 +120,10 @@ def features_to_csv(volume_ml, roi_features, csv_path):
     # csv_content = f"# {datetime.now().astimezone().isoformat()}\n"
     csv_content = "# version=3\n"
     csv_content += f"# volume_ml={volume_ml}\n"
-    csv_content += "roi,biovolume_px,biovolume_um3,biomass_ugl\n"
+    csv_content += (
+        "roi,biovolume_px,biovolume_um3,biomass_ugl,"
+        "area,major_axis_length,minor_axis_length\n"
+    )
     for roi_feat in roi_features:
         csv_content += ",".join(map(str, roi_feat)) + "\n"
     with open(csv_path, "w") as fh:
