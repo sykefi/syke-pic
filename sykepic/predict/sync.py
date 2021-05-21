@@ -256,8 +256,10 @@ def upload(upload_record, compression, local_dir, bucket_dir, bucket, suffix=Non
             # Archive path: local_dir/yyyy/mm/yyyymmdd[.suffix].compression
             archive = local_dir / day_dir.parent / f"{''.join(day_dir.parts[-3:])}"
             if suffix:
+                suffix += f".{compression}"
                 archive = archive.with_suffix(suffix)
-            archive = archive.with_suffix(f".{compression}")
+            else:
+                archive = archive.with_suffix(f".{compression}")
             create_archive(local_dir / day_dir, archive, compression)
             # 4. Upload archive
             obj = f"{bucket_dir}/{archive.relative_to(local_dir)}"
