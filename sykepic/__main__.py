@@ -16,7 +16,7 @@ Note: Make sure you are using the correct python environment.
 from argparse import ArgumentParser
 
 from sykepic.train import train, dataset
-from sykepic.predict import predict, sync
+from sykepic.compute import probabilities, features, sync
 from sykepic.utils import logger
 
 
@@ -51,53 +51,67 @@ def main():
         "--dist", metavar="FILE", help="Save a class distribution plot to FILE"
     )
 
-    # Parser for 'sykepic predict'
-    predict_parser = subparsers.add_parser(
-        "predict", description="Use a trained classifier for inference"
+    # Parser for 'sykepic prob'
+    prob_parser = subparsers.add_parser(
+        "prob", description="Calculate class probabilities"
     )
-    predict_parser.set_defaults(func=predict.main)
-    predict_parser.add_argument("model", help="Model directory")
-    predict_parser.add_argument("raw", help="Root directory of raw IFCB data")
-    predict_parser.add_argument("out", help="Root output directory")
-    predict_parser.add_argument(
-        "-b", "--batch_size", type=int, default=64, metavar="INT", help="Default is 64"
+    prob_parser.set_defaults(func=probabilities.call)
+    prob_raw = prob_parser.add_mutually_exclusive_group(required=True)
+    prob_raw.add_argument(
+        "-r", "--raw", metavar="DIR", help="Root directory of raw IFCB data"
     )
-    predict_parser.add_argument(
-        "-w", "--num_workers", type=int, default=2, metavar="INT", help="Default is 2"
+    prob_raw.add_argument(
+        "-s",
+        "--samples",
+        nargs="+",
+        metavar="PATH",
+        help="One or more sample paths (raw file without suffix)",
     )
-    predict_parser.add_argument(
-        "-l",
-        "--limit",
-        type=int,
-        metavar="INT",
-        help=(
-            "Limit how many samples to process. "
-            "Samples will be drawn evenly from raw directory."
-        ),
+    prob_parser.add_argument("-m", "--model", required=True, help="Model directory")
+    prob_parser.add_argument("-o", "--out", required=True, help="Root output directory")
+    prob_parser.add_argument(
+        "-b", "--batch-size", type=int, default=64, metavar="INT", help="Default is 64"
     )
-    predict_parser.add_argument(
-        "-e",
-        "--softmax_exp",
-        default=1.3,
-        metavar="FLOAT",
-        help=("Exponent to use in softmax, use 'e' for normal softmax"),
+    prob_parser.add_argument(
+        "-w", "--num-workers", type=int, default=2, metavar="INT", help="Default is 2"
     )
-    predict_parser.add_argument(
+    prob_parser.add_argument(
         "-f",
         "--force",
         action="store_true",
-        help="Force overwrite of any previous predictions",
+        help="Force overwrite of previous probabilities",
     )
-    # predict_parser.add_argument(
-    #     '--allas', metavar='PATH',
-    #     help='Path to bucket or directory in Allas with raw files'
-    # )
+
+    # Parser for 'sykepic feat'
+    feat_parser = subparsers.add_parser("feat", description="Extract features")
+    feat_parser.set_defaults(func=features.call)
+    feat_raw = feat_parser.add_mutually_exclusive_group(required=True)
+    feat_raw.add_argument(
+        "-r", "--raw", metavar="DIR", help="Root directory of raw IFCB data"
+    )
+    feat_raw.add_argument(
+        "-s",
+        "--samples",
+        nargs="+",
+        metavar="PATH",
+        help="One or more sample paths (raw file without suffix)",
+    )
+    feat_parser.add_argument("-o", "--out", required=True, help="Root output directory")
+    feat_parser.add_argument(
+        "-p", "--parallel", action="store_true", help="Use multiple cores"
+    )
+    feat_parser.add_argument(
+        "-f",
+        "--force",
+        action="store_true",
+        help="Force overwrite of previous features",
+    )
 
     # Parser for 'sykepic sync'
     sync_parser = subparsers.add_parser(
         "sync", description="Synchronization service with Allas"
     )
-    sync_parser.set_defaults(func=sync.main)
+    sync_parser.set_defaults(func=sync.call)
     sync_parser.add_argument("config", metavar="FILE", help="Configuration file")
 
     # Parser for 'sykepic dataset'
