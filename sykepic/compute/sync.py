@@ -10,43 +10,44 @@ import boto3
 from botocore.exceptions import ClientError
 from requests import HTTPError
 from sykepic.utils import ifcb, logger
-from sykepic.utils.files import create_archive
+from sykepic.utils.files import create_archive, list_sample_paths
 
-from . import biovolume
-from .predict import predict
+from . import features, probabilities
 
+RAW_SUFFIX = ".raw"
 log = logger.get_logger("sync")
 
 
-def main(args):
+def call(args):
+    main(args.config)
+
+
+def main(config):
     # Parse config file and set up
     config = ConfigParser()
-    config.read(args.config)
+    config.read(config)
     # Logging
     logger.setup(config["logging"]["config"])
     # Local, Download
     s3 = boto3.resource("s3", endpoint_url=config["download"]["endpoint_url"])
-    record = read_record(config["local"]["sample_record"])
+    sample_record = read_record(config["local"]["sample_record"])
     sample_extensions = tuple(
         ext.strip() for ext in config.get("download", "sample_extensions").split(",")
     )
     download_bucket = s3.Bucket(config["download"]["bucket"])
     local_raw = Path(config["local"]["raw"])
     local_raw.mkdir(parents=True, exist_ok=True)
-    local_pred = Path(config["local"]["predictions"])
-    local_pred.mkdir(parents=True, exist_ok=True)
-    local_biovol = Path(config["local"]["biovolumes"])
-    local_biovol.mkdir(parents=True, exist_ok=True)
-    # Predict
-    model_dir = Path(config["predict"]["model"])
+    local_prob = Path(config["local"]["probabilities"])
+    local_prob.mkdir(parents=True, exist_ok=True)
+    local_feat = Path(config["local"]["features"])
+    local_feat.mkdir(parents=True, exist_ok=True)
+    # Probabilities
+    model_dir = Path(config["probabilities"]["model"])
     if not model_dir.is_dir():
-        raise OSError(f"Model directory '{model_dir} not found'")
-    batch_size = config.getint("predict", "batch_size")
-    num_workers = config.getint("predict", "num_workers")
-    limit = config["predict"]["limit"]
-    limit = int(limit) if limit not in ["", None] else None
-    softmax_exp = config["predict"]["softmax_exp"]
-    softmax_exp = float(softmax_exp) if softmax_exp not in ["", None] else None
+        raise OSError(f"Model directory {model_dir} not found'")
+    batch_size = config.getint("probabilities", "batch_size")
+    num_workers = config.getint("probabilities", "num_workers")
+    prob_force = config.getboolean("probabilities", "force")
     # Features
     feat_parallel = config.getboolean("features", "parallel")
     feat_force = config.getboolean("features", "force")
@@ -58,17 +59,17 @@ def main(args):
     upload_record = read_record(config["local"]["upload_record"])
     upload_bucket = s3.Bucket(config["upload"]["bucket"])
     raw_prefix = config["upload"]["raw_prefix"]
-    pred_prefix = config["upload"]["predictions_prefix"]
-    biovol_prefix = config["upload"]["biovolumes_prefix"]
+    prob_prefix = config["upload"]["probabilities_prefix"]
+    feat_prefix = config["upload"]["features_prefix"]
     compression = config["upload"]["compression"]
     # Remove
     keep = config.getint("remove", "keep")
     remove_raw_files = config.getboolean("remove", "raw_files")
-    remove_pred_files = config.getboolean("remove", "prediction_files")
-    remove_biovol_files = config.getboolean("remove", "biovolume_files")
+    remove_prob_files = config.getboolean("remove", "probabilities_files")
+    remove_feat_files = config.getboolean("remove", "features_files")
     remove_raw_archive = config.getboolean("remove", "raw_archive")
-    remove_pred_archive = config.getboolean("remove", "prediction_archive")
-    remove_biovol_archive = config.getboolean("remove", "biovolume_archive")
+    remove_prob_archive = config.getboolean("remove", "probabilities_archive")
+    remove_feat_archive = config.getboolean("remove", "features_archive")
     remove_from_bucket = config.getboolean("remove", "from_download_bucket")
 
     # Start service loop
@@ -76,7 +77,7 @@ def main(args):
     try:
         while True:
             samples_available = check_available(
-                sample_extensions, record, download_bucket
+                sample_extensions, sample_record, download_bucket
             )
             log.debug(f"{len(samples_available)} samples available")
             if samples_available:
@@ -104,34 +105,37 @@ def main(args):
                             "since it's older than {keep} days"
                         )
                 if samples_downloaded:
-                    log.debug(
-                        f"Making predictions for {len(samples_downloaded)} samples"
+                    sample_paths = list_sample_paths(
+                        local_raw, filter=samples_downloaded
                     )
-                    samples_predicted = predict(
+                    log.debug(
+                        f"Calculating probabilities for {len(sample_paths)} samples"
+                    )
+                    samples_prob = probabilities.main(
+                        sample_paths,
                         model_dir,
-                        local_raw,
-                        local_pred,
-                        batch_size,
-                        num_workers,
-                        softmax_exp=softmax_exp,
-                        sample_filter=samples_downloaded,
-                        limit=limit,
+                        local_prob,
+                        batch_size=batch_size,
+                        num_workers=num_workers,
+                        force=prob_force,
                         progress_bar=False,
                     )
-                    log.debug(
-                        f"Extracting features for {len(samples_predicted)} samples"
-                    )
-                    samples_processed = biovolume.main(
-                        local_raw,
-                        local_biovol,
-                        sample_filter=samples_predicted,
+                    log.debug(f"Extracting features for {len(sample_paths)} samples")
+                    samples_feat = features.main(
+                        sample_paths,
+                        local_feat,
                         parallel=feat_parallel,
                         force=feat_force,
                     )
-                    record.update(samples_processed)
+                    # Add to sample_record those samples that were successful
+                    # in probability and feature calculations
+                    samples_processed = samples_prob.intersection(samples_feat)
+                    sample_record.update(samples_processed)
                     for sample in samples_processed:
                         log.info(f"{sample} processed")
-                    write_record(record, config["local"]["sample_record"])
+                    write_record(
+                        sample_record, config["local"]["sample_record"], "sample-"
+                    )
             if datetime.now() > next_upload:
                 today = datetime.now().strftime("%Y/%m/%d")
                 todays_upload_record = tuple(upload_record) + (today,)
@@ -141,29 +145,29 @@ def main(args):
                     local_raw,
                     raw_prefix,
                     upload_bucket,
-                    suffix=".raw",
+                    suffix=RAW_SUFFIX,
                 )
-                uploaded_pred = upload(
+                uploaded_prob = upload(
                     todays_upload_record,
                     compression,
-                    local_pred,
-                    pred_prefix,
+                    local_prob,
+                    prob_prefix,
                     upload_bucket,
-                    suffix=".prob",
+                    suffix=probabilities.FILE_SUFFIX,
                 )
-                uploaded_biovol = upload(
+                uploaded_feat = upload(
                     todays_upload_record,
                     compression,
-                    local_biovol,
-                    biovol_prefix,
+                    local_feat,
+                    feat_prefix,
                     upload_bucket,
-                    suffix=".feat",
+                    suffix=features.FILE_SUFFIX,
                 )
-                if uploaded_raw != uploaded_pred != uploaded_biovol:
+                if uploaded_raw != uploaded_prob != uploaded_feat:
                     log.warn(
                         f"Upload mismatch: raw {len(uploaded_raw)}, "
-                        f"predictions {len(uploaded_pred)}, "
-                        f"biovolumes {len(uploaded_biovol)}"
+                        f"probabilities {len(uploaded_prob)}, "
+                        f"features {len(uploaded_feat)}"
                     )
                 # Add new days to upload record
                 if uploaded_raw:
@@ -180,8 +184,8 @@ def main(args):
                     remove_from_bucket,
                     download_bucket,
                 )
-                remove(local_pred, keep, remove_pred_files, remove_pred_archive)
-                remove(local_biovol, keep, remove_biovol_files, remove_biovol_archive)
+                remove(local_prob, keep, remove_prob_files, remove_prob_archive)
+                remove(local_feat, keep, remove_feat_files, remove_feat_archive)
                 # Determine next upload time
                 next_upload += timedelta(days=1)
                 log.info(f"Upload and cleanup done. Next time is {next_upload}")

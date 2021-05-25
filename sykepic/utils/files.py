@@ -2,6 +2,10 @@ import tarfile
 import zipfile
 from pathlib import Path
 
+from . import ifcb, logger
+
+log = logger.get_logger("files")
+
 
 def create_archive(src, dest, compression):
     src = Path(src)
@@ -18,3 +22,23 @@ def create_archive(src, dest, compression):
                 tar.write(src_file, arcname=src_file.name)
     else:
         raise ValueError(f"Unknown compression {compression}")
+
+
+def sample_csv_path(sample_path, out_dir, suffix=None):
+    sample_path = Path(sample_path)
+    sample = sample_path.name
+    if suffix:
+        out_name = sample + suffix + ".csv"
+    else:
+        out_name = sample + ".csv"
+    csv_path = (
+        Path(out_dir) / ifcb.sample_to_datetime(sample).strftime("%Y/%m/%d") / out_name
+    )
+    return csv_path
+
+
+def list_sample_paths(root_dir, filter=None):
+    path_gen = (roi.with_suffix("") for roi in Path(root_dir).glob("**/*.roi"))
+    if filter is not None:
+        path_gen = (path for path in path_gen if path.name in filter)
+    return list(path_gen)

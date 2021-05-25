@@ -1,21 +1,25 @@
 import os
-from multiprocessing import Pool, get_context
+from multiprocessing import get_context
 from pathlib import Path
 
 from ifcb_features import compute_features
-from sykepic.utils import ifcb, logger
+from sykepic.utils import files, ifcb, logger
 
+FILE_SUFFIX = ".feat"
 log = logger.get_logger("feat")
 
 
-def main(raw_dir, out_dir, sample_filter=None, parallel=False, force=False):
-    raw_dir = Path(raw_dir)
+def call(args):
+    if args.raw:
+        sample_paths = files.list_sample_paths(args.raw)
+    else:
+        sample_paths = [Path(path) for path in args.samples]
+    main(sample_paths, args.out, args.parallel, args.force)
+
+
+def main(sample_paths, out_dir, parallel=False, force=False):
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
-    # Not sorting the samples, so that each cpu gets them from random timestamps
-    sample_paths = (roi.with_suffix("") for roi in raw_dir.glob("**/*.roi"))
-    if sample_filter is not None:
-        sample_paths = (path for path in sample_paths if path.name in sample_filter)
     if parallel:
         available_cores = os.cpu_count()
         log.debug(f"Extracting features in parallel with {available_cores} cores")
@@ -32,23 +36,17 @@ def main(raw_dir, out_dir, sample_filter=None, parallel=False, force=False):
 
 
 def process_sample(sample_path, out_dir, force=False):
-    sample_path = Path(sample_path)
-    sample = sample_path.name
-    csv_path = (
-        Path(out_dir)
-        / ifcb.sample_to_datetime(sample).strftime("%Y/%m/%d")
-        / f"{sample}.feat.csv"
-    )
+    pid = os.getpid()
+    csv_path = files.sample_csv_path(sample_path, out_dir, suffix=FILE_SUFFIX)
     if csv_path.is_file():
         if force:
-            print(f"[WARNING] {csv_path.name} already exists, overwriting")
-            # log.warn(f"{csv_path.name} already exists, overwriting")
+            print(
+                f"feat [{pid}] - WARNING - {csv_path.name} already exists, overwriting"
+            )
         else:
-            print(f"[WARNING] {csv_path.name} already exists, skipping")
-            # log.warn(f"{csv_path.name} already exists, skipping")
+            print(f"feat [{pid}] - WARNING - {csv_path.name} already exists, skipping")
             return sample_path.name
-    # log.debug(f"Extracting features for {sample}")
-    # print(f"Extracting features for {sample}")
+    print(f"feat [{pid}] - INFO - Extracting features for {sample_path.name}")
     volume_ml, roi_features = sample_features(sample_path)
     features_to_csv(volume_ml, roi_features, csv_path)
     return sample_path.name
@@ -65,7 +63,7 @@ def sample_features(sample_path):
             log.warn(f"{root.name} volume_ml is {volume_ml}")
     except Exception:
         log.exception(f"Unable to calculate sample volume for {root.name}")
-        return
+        return None
     roi_features = []
     for roi_id, roi_array in ifcb.raw_to_numpy(adc, roi):
         _, all_roi_features = compute_features(roi_array)
