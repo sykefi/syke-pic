@@ -94,12 +94,12 @@ def process_sample(sample_path, net, params, out_dir, force=False):
         else:
             log.warn(f"{csv_path.name} already exists, skipping")
             return sample
-    log.debug(f"Calculating probabilities for {sample}")
+    log.debug(f"Computing probabilities for {sample}")
     try:
         dataloader, img_dir = sample_dataloader(sample_path, params)
         probabilities = net_pass(net, dataloader, params.device)
     except Exception:
-        log.exception(f"While calculating probabilities for {sample}")
+        log.exception(f"While computing probabilities for {sample}")
         return None
     finally:
         # Remove extracted images even in case of exception

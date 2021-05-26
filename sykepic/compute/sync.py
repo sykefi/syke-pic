@@ -9,6 +9,7 @@ from time import sleep
 import boto3
 from botocore.exceptions import ClientError
 from requests import HTTPError
+
 from sykepic.utils import ifcb, logger
 from sykepic.utils.files import create_archive, list_sample_paths
 
@@ -22,10 +23,10 @@ def call(args):
     main(args.config)
 
 
-def main(config):
+def main(config_file):
     # Parse config file and set up
     config = ConfigParser()
-    config.read(config)
+    config.read(config_file)
     # Logging
     logger.setup(config["logging"]["config"])
     # Local, Download
@@ -58,9 +59,9 @@ def main(config):
     )
     upload_record = read_record(config["local"]["upload_record"])
     upload_bucket = s3.Bucket(config["upload"]["bucket"])
-    raw_prefix = config["upload"]["raw_prefix"]
-    prob_prefix = config["upload"]["probabilities_prefix"]
-    feat_prefix = config["upload"]["features_prefix"]
+    raw_upload_dir = config["upload"]["raw_dir"]
+    prob_upload_dir = config["upload"]["probabilities_dir"]
+    feat_upload_dir = config["upload"]["features_dir"]
     compression = config["upload"]["compression"]
     # Remove
     keep = config.getint("remove", "keep")
@@ -109,7 +110,7 @@ def main(config):
                         local_raw, filter=samples_downloaded
                     )
                     log.debug(
-                        f"Calculating probabilities for {len(sample_paths)} samples"
+                        f"Computing probabilities for {len(sample_paths)} samples"
                     )
                     samples_prob = probabilities.main(
                         sample_paths,
@@ -128,7 +129,7 @@ def main(config):
                         force=feat_force,
                     )
                     # Add to sample_record those samples that were successful
-                    # in probability and feature calculations
+                    # in probability and feature computations
                     samples_processed = samples_prob.intersection(samples_feat)
                     sample_record.update(samples_processed)
                     for sample in samples_processed:
@@ -143,7 +144,7 @@ def main(config):
                     todays_upload_record,
                     compression,
                     local_raw,
-                    raw_prefix,
+                    raw_upload_dir,
                     upload_bucket,
                     suffix=RAW_SUFFIX,
                 )
@@ -151,7 +152,7 @@ def main(config):
                     todays_upload_record,
                     compression,
                     local_prob,
-                    prob_prefix,
+                    prob_upload_dir,
                     upload_bucket,
                     suffix=probabilities.FILE_SUFFIX,
                 )
@@ -159,7 +160,7 @@ def main(config):
                     todays_upload_record,
                     compression,
                     local_feat,
-                    feat_prefix,
+                    feat_upload_dir,
                     upload_bucket,
                     suffix=features.FILE_SUFFIX,
                 )
