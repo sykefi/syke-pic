@@ -96,6 +96,7 @@ def raw_to_png(adc, roi, out_dir=None, limit=None, exist_ok=False):
     roi_data = np.fromfile(roi, dtype="uint8")
     # Parse each line of .adc-file
     with open(adc) as adc_fh:
+        contains_empty = False
         for i, line in enumerate(adc_fh, start=1):
             line = line.split(",")
             roi_x = int(line[15])  # ROI width
@@ -113,12 +114,15 @@ def raw_to_png(adc, roi, out_dir=None, limit=None, exist_ok=False):
                 img_path = out_dir / f"{i}.png"
                 # imwrite reshapes automatically to 3-dimensions (RGB)
                 cv2.imwrite(str(img_path), img)
-            except Exception as e:
-                log.exception(f"{adc.name} line {i}: {e}")
-                # with open(out_dir/'errors.log', 'a') as log_fh:
-                #     log_fh.write(f'{adc.name}: line {i}: {e}\n')
+            except ValueError:
+                # This will execute when reshaping array of size 0
+                contains_empty = True
+            except Exception:
+                log.exception(f"{adc.name} line {i}")
             if limit and i >= limit:
                 break
+        if contains_empty:
+            log.warn(f"{adc.stem} contains empty blobs")
 
 
 def raw_to_numpy(adc, roi):
