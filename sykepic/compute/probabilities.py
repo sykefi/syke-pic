@@ -62,12 +62,15 @@ def main(
     # Optionally hide tqdm progress bar
     iterator = tqdm(sample_paths, desc="Progress") if progress_bar else sample_paths
     # Start probability process
-    samples_processed = []
+    samples_processed = set()
     for sample_path in iterator:
-        samples_processed.append(
-            process_sample(sample_path, net, params, out_dir, force)
-        )
-    return set(filter(None, samples_processed))
+        try:
+            samples_processed.add(
+                process_sample(sample_path, net, params, out_dir, force)
+            )
+        except ValueError:
+            log.exception(f"Faulty raw data for {sample_path.name}")
+    return samples_processed
 
 
 def prepare_model(model_dir):
@@ -95,33 +98,24 @@ def process_sample(sample_path, net, params, out_dir, force=False):
             log.warn(f"{csv_path.name} already exists, skipping")
             return sample
     log.debug(f"Computing probabilities for {sample}")
-    try:
-        dataloader, img_dir = sample_dataloader(sample_path, params)
-        probabilities = net_pass(net, dataloader, params.device)
-    except Exception:
-        log.exception(f"While computing probabilities for {sample}")
-        return None
-    finally:
-        # Remove extracted images even in case of exception
-        shutil.rmtree(img_dir)
-    probabilities_to_csv(probabilities, params.classes, csv_path)
-    return sample
-
-
-def sample_dataloader(sample_path, params):
     img_dir = f"{sample_path}_images"
     roi = sample_path.with_suffix(".roi")
     adc = sample_path.with_suffix(".adc")
     try:
-        ifcb.raw_to_png(adc, roi, out_dir=img_dir)
-    except FileExistsError:
-        log.warn(f"Images already extracted for {sample_path.name}")
-    img_paths = sorted(Path(img_dir).glob("**/*.png"))
-    dataset = ImageDataset(
-        img_paths, transform=params.transform, num_chans=params.img_shape[0]
-    )
-    dataloader = DataLoader(dataset, params.batch_size, num_workers=params.num_workers)
-    return dataloader, img_dir
+        ifcb.raw_to_png(adc, roi, out_dir=img_dir, force=True)
+        img_paths = sorted(Path(img_dir).glob("**/*.png"))
+        dataset = ImageDataset(
+            img_paths, transform=params.transform, num_chans=params.img_shape[0]
+        )
+        dataloader = DataLoader(dataset, params.batch_size, num_workers=params.num_workers)
+        probabilities = net_pass(net, dataloader, params.device)
+    except Exception:
+        raise
+    finally:
+        # Remove extracted images even in case of exception
+        shutil.rmtree(img_dir, ignore_errors=True)
+    probabilities_to_csv(probabilities, params.classes, csv_path)
+    return sample
 
 
 def net_pass(net, dataloader, device="cpu"):

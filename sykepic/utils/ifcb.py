@@ -65,7 +65,7 @@ def extract_sample_images(sample, raw_dir, out_dir, exist_ok=False):
     raw_to_png(adc, roi, out_dir, exist_ok=exist_ok)
 
 
-def raw_to_png(adc, roi, out_dir=None, limit=None, exist_ok=False):
+def raw_to_png(adc, roi, out_dir=None, force=False):
     """Parses .adc and .roi files into PNG images
 
     Parameters
@@ -76,27 +76,21 @@ def raw_to_png(adc, roi, out_dir=None, limit=None, exist_ok=False):
         Path to .roi-file
     out_dir : str, Path
         Defaults to adc-file's stem
-    limit : int
-        Optional limit on how many roi to parse
-    exist_ok : bool
-        Whether to allow overwriting to existing out_dir
+    force : bool
+        Overwrite existing images in out_dir
     """
 
     adc = Path(adc)
     roi = Path(roi)
-    out_dir = Path(out_dir)
     for f in (adc, roi):
         if not f.is_file():
             raise FileNotFoundError(f)
-    if not out_dir:
-        out_dir = Path(adc.with_suffix(""))
-    Path.mkdir(out_dir, parents=True, exist_ok=exist_ok)
-
+    out_dir = Path(adc.with_suffix("")) if not out_dir else Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=force)
     # Read bytes from .roi-file into 8-bit integers
     roi_data = np.fromfile(roi, dtype="uint8")
     # Parse each line of .adc-file
     with open(adc) as adc_fh:
-        contains_empty = False
         for i, line in enumerate(adc_fh, start=1):
             line = line.split(",")
             roi_x = int(line[15])  # ROI width
@@ -105,24 +99,14 @@ def raw_to_png(adc, roi, out_dir=None, limit=None, exist_ok=False):
             # Skip empty roi
             if roi_x < 1 or roi_y < 1:
                 continue
-            try:
-                # roi_data is a 1-dimensional array, where
-                # all roi are stacked one after another.
-                end = start + (roi_x * roi_y)
-                # Reshape into 2-dimensions
-                img = roi_data[start:end].reshape((roi_y, roi_x))
-                img_path = out_dir / f"{i}.png"
-                # imwrite reshapes automatically to 3-dimensions (RGB)
-                cv2.imwrite(str(img_path), img)
-            except ValueError:
-                # This will execute when reshaping array of size 0
-                contains_empty = True
-            except Exception:
-                log.exception(f"{adc.name} line {i}")
-            if limit and i >= limit:
-                break
-        if contains_empty:
-            log.warn(f"{adc.stem} contains empty blobs")
+            # roi_data is a 1-dimensional array, where
+            # all roi are stacked one after another.
+            end = start + (roi_x * roi_y)
+            # Reshape into 2-dimensions
+            img = roi_data[start:end].reshape((roi_y, roi_x))
+            img_path = out_dir / f"{i}.png"
+            # imwrite reshapes automatically to 3-dimensions (RGB)
+            cv2.imwrite(str(img_path), img)
 
 
 def raw_to_numpy(adc, roi):
