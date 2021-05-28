@@ -107,7 +107,9 @@ def process_sample(sample_path, net, params, out_dir, force=False):
         dataset = ImageDataset(
             img_paths, transform=params.transform, num_chans=params.img_shape[0]
         )
-        dataloader = DataLoader(dataset, params.batch_size, num_workers=params.num_workers)
+        dataloader = DataLoader(
+            dataset, params.batch_size, num_workers=params.num_workers
+        )
         probabilities = net_pass(net, dataloader, params.device)
     except Exception:
         raise

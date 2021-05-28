@@ -111,17 +111,14 @@ def raw_to_png(adc, roi, out_dir=None, force=False):
 
 def raw_to_numpy(adc, roi):
     adc = Path(adc)
-    try:
-        # Read bytes from .roi-file into 8-bit integers
-        roi_data = np.fromfile(roi, dtype="uint8")
-        # Parse each line of .adc-file
-        with adc.open() as adc_fh:
-            for i, adc_line in enumerate(adc_fh, start=1):
-                np_arr = next_roi(roi_data, adc_line)
-                if np_arr is not None:
-                    yield i, np_arr
-    except Exception:
-        log.exception("While converting raw to numpy for {adc.stem}")
+    # Read bytes from .roi-file into 8-bit integers
+    roi_data = np.fromfile(roi, dtype="uint8")
+    # Parse each line of .adc-file
+    with adc.open() as adc_fh:
+        for i, adc_line in enumerate(adc_fh, start=1):
+            np_arr = next_roi(roi_data, adc_line)
+            if np_arr is not None:
+                yield i, np_arr
 
 
 def next_roi(roi_data, adc_line):
