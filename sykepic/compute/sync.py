@@ -27,21 +27,26 @@ def main(config_file):
     # Parse config file and set up
     config = ConfigParser()
     config.read(config_file)
-    # Logging
-    logger.setup(config["logging"]["config"])
-    # Local, Download
-    s3 = boto3.resource("s3", endpoint_url=config["download"]["endpoint_url"])
-    sample_record = read_record(config["local"]["sample_record"])
-    sample_extensions = tuple(
-        ext.strip() for ext in config.get("download", "sample_extensions").split(",")
-    )
-    download_bucket = s3.Bucket(config["download"]["bucket"])
+
+    # Local
     local_raw = Path(config["local"]["raw"])
     local_raw.mkdir(parents=True, exist_ok=True)
     local_prob = Path(config["local"]["probabilities"])
     local_prob.mkdir(parents=True, exist_ok=True)
     local_feat = Path(config["local"]["features"])
     local_feat.mkdir(parents=True, exist_ok=True)
+    process_record = read_record(config["local"]["process_record"])
+    upload_record = read_record(config["local"]["upload_record"])
+    skip_record = read_record(config["local"]["skip_record"])
+
+    # Download
+    s3 = boto3.resource("s3", endpoint_url=config["download"]["endpoint_url"])
+    sample_extensions = tuple(
+        ext.strip() for ext in config.get("download", "sample_extensions").split(",")
+    )
+    download_bucket = s3.Bucket(config["download"]["bucket"])
+    byte_limit = config.getfloat("download", "byte_limit")
+
     # Probabilities
     model_dir = Path(config["probabilities"]["model"])
     if not model_dir.is_dir():
@@ -49,20 +54,22 @@ def main(config_file):
     batch_size = config.getint("probabilities", "batch_size")
     num_workers = config.getint("probabilities", "num_workers")
     prob_force = config.getboolean("probabilities", "force")
+
     # Features
     feat_parallel = config.getboolean("features", "parallel")
     feat_force = config.getboolean("features", "force")
+
     # Upload
     upload_time = datetime.strptime(config["upload"]["time"], "%H:%M")
     next_upload = datetime.now().replace(
         hour=upload_time.hour, minute=upload_time.minute, second=0, microsecond=0
     )
-    upload_record = read_record(config["local"]["upload_record"])
     upload_bucket = s3.Bucket(config["upload"]["bucket"])
     raw_upload_dir = config["upload"]["raw_dir"]
     prob_upload_dir = config["upload"]["probabilities_dir"]
     feat_upload_dir = config["upload"]["features_dir"]
     compression = config["upload"]["compression"]
+
     # Remove
     keep = config.getint("remove", "keep")
     remove_raw_files = config.getboolean("remove", "raw_files")
@@ -73,163 +80,172 @@ def main(config_file):
     remove_feat_archive = config.getboolean("remove", "features_archive")
     remove_from_bucket = config.getboolean("remove", "from_download_bucket")
 
+    # Logging
+    logger.setup(config["logging"]["config"])
+
     # Start service loop
     log.info("Synchronization service started")
-    try:
-        while True:
-            samples_available = check_available(
-                sample_extensions, sample_record, download_bucket
+    while True:
+
+        log.debug("Checking for new samples")
+        samples_available, samples_skipped = check_available(
+            process_record.union(skip_record),
+            sample_extensions,
+            download_bucket,
+            byte_limit=byte_limit,
+        )
+
+        if samples_skipped:
+            skip_record.update(samples_skipped)
+            write_record(skip_record, config["local"]["skip_record"], "skip-")
+
+        late_record = None
+        if samples_available:
+            samples_downloaded, late_record = download(
+                samples_available,
+                sample_extensions,
+                upload_record,
+                local_raw,
+                download_bucket,
             )
-            log.debug(f"{len(samples_available)} samples available")
-            late_record = None
-            if samples_available:
-                samples_downloaded, late_record = download(
-                    samples_available,
-                    sample_extensions,
-                    upload_record,
-                    local_raw,
-                    download_bucket,
+            log.debug(f"Processing {len(samples_downloaded)} samples")
+            # Check for samples arriving after their day has already been uploaded.
+            # If their day directory hasn't been removed yet,
+            # these days can be re-uploaded.
+            today = datetime.today()
+            for day_path in late_record:
+                if (today - datetime.strptime(day_path, "%Y/%m/%d")).days < keep:
+                    log.info(
+                        f"{day_path} will be re-uploaded with late arriving samples"
+                    )
+                    upload_record.remove(day_path)
+                    write_record(
+                        upload_record, config["local"]["upload_record"], "upload-"
+                    )
+                else:
+                    log.warning(
+                        f"{day_path} can't be re-uploaded, "
+                        "since it's older than {keep} days"
+                    )
+
+            if samples_downloaded:
+                samples_processed = set()
+                samples_failed = set()
+                sample_paths_download = list_sample_paths(
+                    local_raw, filter=samples_downloaded
                 )
-                log.debug(f"{len(samples_downloaded)} samples downloaded")
-                # Check for samples arriving after their day has already been uploaded.
-                # If their day directory hasn't been removed yet,
-                # these days can be re-uploaded.
-                today = datetime.today()
-                for day_path in late_record:
-                    if (today - datetime.strptime(day_path, "%Y/%m/%d")).days < keep:
-                        log.info(
-                            f"{day_path} will be re-uploaded with late arriving samples"
-                        )
-                        upload_record.remove(day_path)
-                        write_record(
-                            upload_record, config["local"]["upload_record"], "upload-"
-                        )
-                    else:
-                        log.warn(
-                            f"{day_path} can't be re-uploaded, "
-                            "since it's older than {keep} days"
-                        )
-                if samples_downloaded:
-                    sample_paths_download = list_sample_paths(
-                        local_raw, filter=samples_downloaded
-                    )
-                    log.debug(
-                        "Computing probabilities for "
-                        f"{len(sample_paths_download)} samples"
-                    )
-                    samples_prob = probabilities.main(
-                        sample_paths_download,
-                        model_dir,
-                        local_prob,
-                        batch_size=batch_size,
-                        num_workers=num_workers,
-                        force=prob_force,
-                        progress_bar=False,
-                    )
-                    sample_paths_prob = list_sample_paths(
-                        local_raw, filter=samples_prob
-                    )
-                    log.debug(
-                        f"Extracting features for {len(sample_paths_prob)} samples"
-                    )
+                log.debug(
+                    "Computing probabilities for "
+                    f"{len(sample_paths_download)} samples"
+                )
+                samples_prob = probabilities.main(
+                    sample_paths_download,
+                    model_dir,
+                    local_prob,
+                    batch_size=batch_size,
+                    num_workers=num_workers,
+                    force=prob_force,
+                    progress_bar=False,
+                )
+                sample_paths_prob = list_sample_paths(local_raw, filter=samples_prob)
+                log.debug(f"Extracting features for {len(sample_paths_prob)} samples")
+                if samples_prob:
                     samples_feat = features.main(
                         sample_paths_prob,
                         local_feat,
                         parallel=feat_parallel,
                         force=feat_force,
                     )
-                    # Add to sample_record those that were successfully processed
+                    # Add to process_record those that were successfully processed
                     samples_processed = samples_downloaded.intersection(samples_feat)
-                    if samples_processed:
-                        sample_record.update(samples_processed)
-                        for sample in samples_processed:
-                            log.info(f"{sample} processed")
-                        write_record(
-                            sample_record, config["local"]["sample_record"], "sample-"
-                        )
-                    # Remove those downloaded samples that were unsuccessful.
-                    # This can happen, because apparently boto3 is fine with downloading
-                    # partially uploaded files...
-                    samples_failed = samples_downloaded.difference(samples_processed)
-                    for sample in samples_failed:
-                        for raw_file in local_raw.glob(f"**/{sample}.*"):
-                            raw_file.unlink()
-
-            if datetime.now() > next_upload or late_record:
-                today = datetime.now().strftime("%Y/%m/%d")
-                todays_upload_record = tuple(upload_record) + (today,)
-                uploaded_raw = upload(
-                    todays_upload_record,
-                    compression,
-                    local_raw,
-                    raw_upload_dir,
-                    upload_bucket,
-                    suffix=RAW_SUFFIX,
-                )
-                uploaded_prob = upload(
-                    todays_upload_record,
-                    compression,
-                    local_prob,
-                    prob_upload_dir,
-                    upload_bucket,
-                    suffix=probabilities.FILE_SUFFIX,
-                )
-                uploaded_feat = upload(
-                    todays_upload_record,
-                    compression,
-                    local_feat,
-                    feat_upload_dir,
-                    upload_bucket,
-                    suffix=features.FILE_SUFFIX,
-                )
-                if uploaded_raw != uploaded_prob != uploaded_feat:
-                    log.warn(
-                        f"Upload mismatch: raw {len(uploaded_raw)}, "
-                        f"probabilities {len(uploaded_prob)}, "
-                        f"features {len(uploaded_feat)}"
-                    )
-                # Add new days to upload record
-                if uploaded_raw:
-                    upload_record.update(uploaded_raw)
+                    process_record.update(samples_processed)
+                    for sample in samples_processed:
+                        log.info(f"{sample} processed")
                     write_record(
-                        upload_record, config["local"]["upload_record"], "upload-"
+                        process_record, config["local"]["process_record"], "process-"
                     )
-                # Cleaning up old files
-                remove(
-                    local_raw,
-                    keep,
-                    remove_raw_files,
-                    remove_raw_archive,
-                    remove_from_bucket,
-                    download_bucket,
+                # Remove those downloaded samples that were unsuccessful.
+                # This can happen, because apparently boto3 is fine with downloading
+                # partially uploaded files...
+                samples_failed = samples_downloaded.difference(samples_processed)
+                for sample in samples_failed:
+                    for raw_file in local_raw.glob(f"**/{sample}.*"):
+                        raw_file.unlink()
+
+        if datetime.now() > next_upload or late_record:
+            today = datetime.now().strftime("%Y/%m/%d")
+            todays_upload_record = tuple(upload_record) + (today,)
+            uploaded_raw = upload(
+                todays_upload_record,
+                compression,
+                local_raw,
+                raw_upload_dir,
+                upload_bucket,
+                suffix=RAW_SUFFIX,
+            )
+            uploaded_prob = upload(
+                todays_upload_record,
+                compression,
+                local_prob,
+                prob_upload_dir,
+                upload_bucket,
+                suffix=probabilities.FILE_SUFFIX,
+            )
+            uploaded_feat = upload(
+                todays_upload_record,
+                compression,
+                local_feat,
+                feat_upload_dir,
+                upload_bucket,
+                suffix=features.FILE_SUFFIX,
+            )
+            if uploaded_raw != uploaded_prob != uploaded_feat:
+                log.warning(
+                    f"Upload mismatch: raw {len(uploaded_raw)}, "
+                    f"probabilities {len(uploaded_prob)}, "
+                    f"features {len(uploaded_feat)}"
                 )
-                remove(local_prob, keep, remove_prob_files, remove_prob_archive)
-                remove(local_feat, keep, remove_feat_files, remove_feat_archive)
-                # Determine next upload time
-                next_upload += timedelta(days=1)
-                log.info(f"Upload and cleanup done. Next time is {next_upload}")
-            else:
-                # Delay next iteration a bit
-                sleep(120)
-    except Exception:
-        log.critical("Unhandled exception in service loop", exc_info=True)
-        raise
+            # Add new days to upload record
+            if uploaded_raw:
+                upload_record.update(uploaded_raw)
+                write_record(upload_record, config["local"]["upload_record"], "upload-")
+            # Cleaning up old files
+            remove(
+                local_raw,
+                keep,
+                remove_raw_files,
+                remove_raw_archive,
+                remove_from_bucket,
+                download_bucket,
+            )
+            remove(local_prob, keep, remove_prob_files, remove_prob_archive)
+            remove(local_feat, keep, remove_feat_files, remove_feat_archive)
+            # Determine next upload time
+            next_upload += timedelta(days=1)
+            log.info(f"Upload and cleanup done. Next time is {next_upload}")
+        else:
+            # Delay next iteration a bit
+            sleep(120)
 
 
-def check_available(extensions, record, bucket):
-    log.debug("Checking for new samples")
-    # Iterate over object keys in the given bucket, filtering out those that
-    # don't end with the correct extensions. Next remove the extensions from
-    # the key and add them to a set, which will keep only one name per sample.
-    samples = set(
-        obj.key.split(".")[0]
-        for obj in bucket.objects.all()
-        if obj.key.endswith(extensions)
-    )
-    # Taking a set difference with record, will return
-    # those keys that are only in samples, i.e., they are new.
-    new_samples = samples.difference(record)
-    return new_samples
+def check_available(handled_samples, extensions, bucket, byte_limit=None):
+    samples_available = set()
+    samples_skipped = set()
+    for obj in bucket.objects.all():
+        if obj.key.endswith(extensions):
+            sample = obj.key.split(".")[0]
+            if sample not in handled_samples:
+                if byte_limit and obj.size > byte_limit:
+                    log.warning(
+                        f"{obj.key} is too large ({obj.size / 1e9:.3f} GB), skipping"
+                    )
+                    samples_skipped.add(sample)
+                else:
+                    samples_available.add(sample)
+
+    # Remove any overlap, due to three files per sample
+    samples_available.difference_update(samples_skipped)
+    return samples_available, samples_skipped
 
 
 def download(samples, extensions, upload_record, local_raw, bucket):
@@ -239,7 +255,9 @@ def download(samples, extensions, upload_record, local_raw, bucket):
         sample_date = ifcb.sample_to_datetime(sample)
         day_path = sample_date.strftime("%Y/%m/%d")
         if day_path in upload_record:
-            log.warn(f"Downloading {sample}, but {day_path} has already been uploaded")
+            log.warning(
+                f"Downloading {sample}, but {day_path} has already been uploaded"
+            )
             late_record.add(day_path)
         to = local_raw / day_path
         to.mkdir(exist_ok=True, parents=True)
