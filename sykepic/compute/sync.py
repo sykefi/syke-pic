@@ -79,6 +79,7 @@ def main(config_file):
     remove_prob_archive = config.getboolean("remove", "probabilities_archive")
     remove_feat_archive = config.getboolean("remove", "features_archive")
     remove_from_bucket = config.getboolean("remove", "from_download_bucket")
+    remove_from_process_record = config.getboolean("remove", "process_record")
 
     # Logging
     logger.setup(config["logging"]["config"])
@@ -108,7 +109,7 @@ def main(config_file):
                 local_raw,
                 download_bucket,
             )
-            log.debug(f"Processing {len(samples_downloaded)} samples")
+            log.info(f"Processing {len(samples_downloaded)} new samples")
             # Check for samples arriving after their day has already been uploaded.
             # If their day directory hasn't been removed yet,
             # these days can be re-uploaded.
@@ -159,7 +160,7 @@ def main(config_file):
                     # Add to process_record those that were successfully processed
                     samples_processed = samples_downloaded.intersection(samples_feat)
                     process_record.update(samples_processed)
-                    for sample in samples_processed:
+                    for sample in sorted(samples_processed):
                         log.info(f"{sample} processed")
                     write_record(
                         process_record, config["local"]["process_record"], "process-"
@@ -168,7 +169,8 @@ def main(config_file):
                 # This can happen, because apparently boto3 is fine with downloading
                 # partially uploaded files...
                 samples_failed = samples_downloaded.difference(samples_processed)
-                for sample in samples_failed:
+                for sample in sorted(samples_failed):
+                    log.warning(f"{sample} failed to process")
                     for raw_file in local_raw.glob(f"**/{sample}.*"):
                         raw_file.unlink()
 
@@ -220,6 +222,12 @@ def main(config_file):
             )
             remove(local_prob, keep, remove_prob_files, remove_prob_archive)
             remove(local_feat, keep, remove_feat_files, remove_feat_archive)
+            if remove_from_process_record:
+                # Remove old (older than keep) samples from process record
+                process_record = clean_process_record(process_record, keep)
+                write_record(
+                    process_record, config["local"]["process_record"], "process-"
+                )
             # Determine next upload time
             next_upload += timedelta(days=1)
             log.info(f"Upload and cleanup done. Next time is {next_upload}")
@@ -359,6 +367,17 @@ def remove(local_dir, keep, files, archive, from_bucket=False, bucket=None):
                 pass
         if from_bucket:
             delete_many_from_bucket(day_samples, bucket)
+
+
+def clean_process_record(process_record, keep):
+    today = datetime.today()
+    samples_to_remove = set()
+    for sample in process_record:
+        sample_date = ifcb.sample_to_datetime(sample)
+        if (today - sample_date).days < keep:
+            continue
+        samples_to_remove.add(sample)
+    return process_record.difference(samples_to_remove)
 
 
 def read_record(file):
