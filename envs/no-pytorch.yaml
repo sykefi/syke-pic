@@ -7,9 +7,12 @@ dependencies:
     - jupyter
     - matplotlib
     - scikit-learn
+    - scikit-image
     - tqdm
     - boto3
     - requests
     - pyyaml
     - pip:
         - opencv-python-headless
+        - phasepack
+        - pyfftw

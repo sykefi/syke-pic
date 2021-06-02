@@ -9,6 +9,7 @@ dependencies:
     - jupyter
     - matplotlib
     - scikit-learn
+    - scikit-image
     - tqdm
     - boto3
     - requests
@@ -18,3 +19,5 @@ dependencies:
     - cudatoolkit=10.2
     - pip:
         - opencv-python-headless
+        - phasepack
+        - pyfftw
