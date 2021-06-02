@@ -1,4 +1,4 @@
-"""This module contains the main logic for model inference."""
+"""Compute class probabilities for raw IFCB data"""
 
 import shutil
 from collections import namedtuple

@@ -7,7 +7,7 @@ import numpy as np
 from IPython.display import clear_output, display
 from ipywidgets import Box, Button, Dropdown, Image, Label, Layout, Text, VBox
 
-from .classification import read_predictions
+from sykepic.compute.prediction import prediction_dataframe
 from sykepic.utils.ifcb import extract_sample_images
 
 
@@ -78,7 +78,7 @@ class PredictionViewer:
             self.sample = Path(predictions).with_suffix("").name
             self.img_dir = self.work_dir / "images" / self.sample
 
-        self.df = read_predictions(predictions, thresholds)
+        self.df = prediction_dataframe(predictions, thresholds)
 
         self.raw_dir = raw_dir
         self.label = label

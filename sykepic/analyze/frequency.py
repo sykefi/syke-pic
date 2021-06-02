@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from .classification import read_predictions
+from sykepic.compute.prediction import prediction_dataframe
 from sykepic.utils.ifcb import sample_to_datetime
 
 
@@ -122,7 +122,7 @@ def csv_to_df(csv_date_list, thresholds):
         # sample_df = pd.read_csv(csv).drop('roi', axis=1)
         # Insert 'prediction' and 'confidence' columns.
         # insert_prediction(sample_df)
-        sample_df = read_predictions(csv, thresholds)
+        sample_df = prediction_dataframe(csv, thresholds)
         # Drop all class probability columns, since they aren't needed
         sample_df.drop(sample_df.columns[2:], axis=1, inplace=True)
         # Insert 'timestamp' column

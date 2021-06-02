@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 import torch
 
-from sykepic.compute import probabilities as prob
+from sykepic.compute import probability
 from sykepic.train.network import TorchVisionNet
 from sykepic.train.image import Compose
 
@@ -12,8 +12,10 @@ from sykepic.train.image import Compose
 @pytest.fixture
 def net_and_params():
     model_dir = "examples/models/resnet18_20201022"
-    net, classes, img_shape, eval_transform, device = prob.prepare_model(model_dir)
-    params = prob.EvalParams(
+    net, classes, img_shape, eval_transform, device = probability.prepare_model(
+        model_dir
+    )
+    params = probability.EvalParams(
         batch_size=32,
         num_workers=1,
         classes=classes,
@@ -31,7 +33,7 @@ def test_main(tmp_path):
     ]
     model_dir = "examples/models/resnet18_20201022"
     out_dir = tmp_path / "prob"
-    samples_processed = prob.main(
+    samples_processed = probability.main(
         sample_paths,
         model_dir,
         out_dir,
@@ -46,7 +48,9 @@ def test_main(tmp_path):
 
 def test_prepare_model():
     model_dir = "examples/models/resnet18_20201022"
-    net, classes, img_shape, eval_transform, device = prob.prepare_model(model_dir)
+    net, classes, img_shape, eval_transform, device = probability.prepare_model(
+        model_dir
+    )
     assert isinstance(net, TorchVisionNet)
     assert isinstance(classes, list)
     assert isinstance(classes[0], str)
@@ -59,14 +63,14 @@ def test_process_sample(net_and_params, tmp_path):
     net, params = net_and_params
     sample_path = Path("tests/data/raw/valid/D20180712T065600_IFCB114")
     out_dir = tmp_path / "prob"
-    sample = prob.process_sample(sample_path, net, params, out_dir, force=False)
+    sample = probability.process_sample(sample_path, net, params, out_dir, force=False)
     assert isinstance(sample, str)
     csv = (
         out_dir
         / "2018"
         / "07"
         / "12"
-        / f"D20180712T065600_IFCB114{prob.FILE_SUFFIX}.csv"
+        / f"D20180712T065600_IFCB114{probability.FILE_SUFFIX}.csv"
     )
     assert csv.is_file()
     with open(csv) as fh:
@@ -86,7 +90,7 @@ def slow_test_process_sample(net_and_params, tmp_path):
     net, params = net_and_params
     sample_path = Path("tests/data/raw/valid/D20180816T091250_IFCB114")
     out_dir = tmp_path / "prob"
-    sample = prob.process_sample(sample_path, net, params, out_dir, force=False)
+    sample = probability.process_sample(sample_path, net, params, out_dir, force=False)
     assert isinstance(sample, str)
     csv = next(out_dir.glob("**/*.csv"))
     assert csv.is_file()

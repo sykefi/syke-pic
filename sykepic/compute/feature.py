@@ -1,3 +1,5 @@
+"""Extract features for raw IFCB data"""
+
 import os
 from multiprocessing import get_context
 from pathlib import Path

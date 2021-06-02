@@ -11,7 +11,7 @@ from sklearn.metrics import classification_report
 
 from . import data, network
 from .config import get_img_shape, get_transforms, get_network
-from sykepic.analysis import plot
+from sykepic.analyze import plot
 
 
 def main(args):

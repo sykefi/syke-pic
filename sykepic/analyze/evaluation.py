@@ -3,7 +3,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from .classification import read_predictions, threshold_dictionary
+from sykepic.compute.prediction import prediction_dataframe, threshold_dictionary
 
 
 def parse_evaluations(
@@ -55,7 +55,7 @@ def parse_evaluations(
         raise ValueError("Thresholds not provided")
     if isinstance(thresholds, (str, Path)):
         thresholds = threshold_dictionary(thresholds)
-    pred_df = read_predictions(predictions, thresholds)
+    pred_df = prediction_dataframe(predictions, thresholds)
     search_range = np.arange(0, 1 + search_precision, search_precision)
     result_df = results_as_df(
         eval_df, pred_df, thresholds, threshold_search, search_range, empty, unsure

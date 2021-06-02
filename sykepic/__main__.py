@@ -16,7 +16,8 @@ Note: Make sure you are using the correct python environment.
 from argparse import ArgumentParser
 
 from sykepic.train import train, dataset
-from sykepic.compute import probabilities, features, sync
+from sykepic.compute import probability, feature, classification
+from sykepic.sync import process
 from sykepic.utils import logger
 
 
@@ -55,7 +56,7 @@ def main():
     prob_parser = subparsers.add_parser(
         "prob", description="Calculate class probabilities"
     )
-    prob_parser.set_defaults(func=probabilities.call)
+    prob_parser.set_defaults(func=probability.call)
     prob_raw = prob_parser.add_mutually_exclusive_group(required=True)
     prob_raw.add_argument(
         "-r", "--raw", metavar="DIR", help="Root directory of raw IFCB data"
@@ -84,7 +85,7 @@ def main():
 
     # Parser for 'sykepic feat'
     feat_parser = subparsers.add_parser("feat", description="Extract features")
-    feat_parser.set_defaults(func=features.call)
+    feat_parser.set_defaults(func=feature.call)
     feat_raw = feat_parser.add_mutually_exclusive_group(required=True)
     feat_raw.add_argument(
         "-r", "--raw", metavar="DIR", help="Root directory of raw IFCB data"
@@ -109,9 +110,9 @@ def main():
 
     # Parser for 'sykepic sync'
     sync_parser = subparsers.add_parser(
-        "sync", description="Synchronization service with Allas"
+        "sync", description="Process IFCB data in an infinite loop"
     )
-    sync_parser.set_defaults(func=sync.call)
+    sync_parser.set_defaults(func=process.call)
     sync_parser.add_argument("config", metavar="FILE", help="Configuration file")
 
     # Parser for 'sykepic dataset'
@@ -132,6 +133,31 @@ def main():
     )
     dataset_parser.add_argument(
         "--exclude", nargs="*", default=[], help="Sub-directories to exlude"
+    )
+
+    # Parser for `sykepic class`
+    class_parser = subparsers.add_parser("class", description="Classify samples")
+    class_parser.set_defaults(func=classification.call)
+    class_parser.add_argument("probabilities", help="Root directory of probabilities")
+    class_parser.add_argument("features", help="Root directory of features")
+    class_parser.add_argument(
+        "-t",
+        "--thresholds",
+        metavar="FILE",
+        required=True,
+        help="Probability thresholds file (required)",
+    )
+    class_parser.add_argument(
+        "-d",
+        "--divisions",
+        metavar="FILE",
+        help="Feature divisions file (optional)",
+    )
+    class_parser.add_argument(
+        "-s", "--summary", metavar="FEATURE", help="Create summary from this feature"
+    )
+    class_parser.add_argument(
+        "-o", "--out", metavar="DIR", required=True, help="Root output directory"
     )
 
     # Get arguments for the subparser specified

@@ -1,4 +1,4 @@
-"""Module for synchronising local data with Allas"""
+"""Background process for downloading, processing and uploading data"""
 
 import shutil
 from configparser import ConfigParser
@@ -12,8 +12,7 @@ from requests import HTTPError
 
 from sykepic.utils import ifcb, logger
 from sykepic.utils.files import create_archive, list_sample_paths
-
-from . import features, probabilities
+from sykepic.compute import feature, probability
 
 RAW_SUFFIX = ".raw"
 log = logger.get_logger("sync")
@@ -139,7 +138,7 @@ def main(config_file):
                     "Computing probabilities for "
                     f"{len(sample_paths_download)} samples"
                 )
-                samples_prob = probabilities.main(
+                samples_prob = probability.main(
                     sample_paths_download,
                     model_dir,
                     local_prob,
@@ -151,7 +150,7 @@ def main(config_file):
                 sample_paths_prob = list_sample_paths(local_raw, filter=samples_prob)
                 log.debug(f"Extracting features for {len(sample_paths_prob)} samples")
                 if samples_prob:
-                    samples_feat = features.main(
+                    samples_feat = feature.main(
                         sample_paths_prob,
                         local_feat,
                         parallel=feat_parallel,
@@ -191,7 +190,7 @@ def main(config_file):
                 local_prob,
                 prob_upload_dir,
                 upload_bucket,
-                suffix=probabilities.FILE_SUFFIX,
+                suffix=probability.FILE_SUFFIX,
             )
             uploaded_feat = upload(
                 todays_upload_record,
@@ -199,7 +198,7 @@ def main(config_file):
                 local_feat,
                 feat_upload_dir,
                 upload_bucket,
-                suffix=features.FILE_SUFFIX,
+                suffix=feature.FILE_SUFFIX,
             )
             if uploaded_raw != uploaded_prob != uploaded_feat:
                 log.warning(
