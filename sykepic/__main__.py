@@ -137,7 +137,7 @@ def main():
 
     # Parser for `sykepic class`
     class_parser = subparsers.add_parser("class", description="Classify samples")
-    class_parser.set_defaults(func=classification.call)
+    class_parser.set_defaults(func=classification.main)
     class_parser.add_argument("probabilities", help="Root directory of probabilities")
     class_parser.add_argument("features", help="Root directory of features")
     class_parser.add_argument(
@@ -154,10 +154,30 @@ def main():
         help="Feature divisions file (optional)",
     )
     class_parser.add_argument(
-        "-s", "--summary", metavar="FEATURE", help="Create summary from this feature"
+        "-o",
+        "--out",
+        metavar="PATH",
+        required=True,
+        help="Output CSV-file path (required)",
     )
     class_parser.add_argument(
-        "-o", "--out", metavar="DIR", required=True, help="Root output directory"
+        "-s",
+        "--summarize",
+        metavar="FEATURE",
+        default="biomass_ugl",
+        help="Which feature to summarize, default is biomass_ugl",
+    )
+    class_parser.add_argument(
+        "-a",
+        "--append",
+        action="store_true",
+        help="Append to output file if it exists",
+    )
+    class_parser.add_argument(
+        "-f",
+        "--force",
+        action="store_true",
+        help="Overwrite output file if it exists",
     )
 
     # Get arguments for the subparser specified
