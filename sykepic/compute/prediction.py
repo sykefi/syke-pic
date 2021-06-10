@@ -62,7 +62,7 @@ def row_prediction(row, thresholds):
     above_threshold = (
         (name, True)
         for name, probability in row.sort_values(ascending=False).items()
-        if probability >= thresholds[name]
+        if name in thresholds and probability >= thresholds[name]
     )
     try:
         # Return the first value from generator (highest softmax)
