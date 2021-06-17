@@ -45,7 +45,7 @@ def class_df(
     divisions = read_divisions(divisions_file) if divisions_file else None
 
     df_rows = []
-    iterator = zip(probs, feats)
+    iterator = zip(sorted(probs), sorted(feats))
     if progress_bar:
         iterator = tqdm(list(iterator), desc=f"Processing {len(probs)} samples")
     for prob_csv, feat_csv in iterator:
@@ -66,33 +66,43 @@ def class_df(
     if divisions:
         division_names = names_of_divisions(divisions)
         classes = set(classes).union(division_names).difference(divisions.keys())
-    df = pd.DataFrame(df_rows, columns=sorted(classes))
+    classes = sorted(classes)
+    classes.append("Total")
+    df = pd.DataFrame(df_rows, columns=classes)
     df.index.name = "sample"
     df.fillna(0, inplace=True)
     return df
 
 
 def swell_df(df):
-    # Convert sample names to ISO 8601 (without microseconds)
+    # Convert sample names to ISO 8601 timestamps (without microseconds)
     df.index = df.index.map(sample_to_datetime).map(
         lambda x: x.tz_localize("UTC").replace(microsecond=0).isoformat()
     )
-    df.index.name = "ISO_8601"
+    df.index.name = "Time"
     # Sum Dolichospermum-Anabaenopsis variants together
     df["Dolichospermum-Anabaenopsis"] = df[
         ["Dolichospermum-Anabaenopsis", "Dolichospermum-Anabaenopsis-coiled"]
     ].sum(axis=1)
     df.drop("Dolichospermum-Anabaenopsis-coiled", axis=1, inplace=True)
-    # Sum all together for total biomass
-    df.insert(0, "total", df.sum(axis=1))
-    # df["total"] = df.sum(axis=1)
+    # Sum cyanobacteria
+    cyano_sum = df[
+        [
+            "Aphanizomenon_flosaquae",
+            "Dolichospermum-Anabaenopsis",
+            "Nodularia_spumigena",
+        ]
+    ].sum(axis=1)
+    df.insert(len(df.columns) - 1, "Filamentous cyanobacteria", cyano_sum)
+    # Replace underscores with spaces in class names
+    df.columns = df.columns.str.replace("_", " ")
     return df
 
 
 def df_to_csv(df, out_file, append=False):
-    mode = "a" if append and Path(out_file).is_file() else "w"
-    header = not append
-    df.to_csv(out_file, mode=mode, header=header)
+    append = append and Path(out_file).is_file()
+    mode = "a" if append else "w"
+    df.to_csv(out_file, mode=mode, header=not append)
 
 
 def process_sample(
@@ -107,11 +117,14 @@ def process_sample(
         axis=1,
     )
     df.index.name = "roi"
-    # Discard unclassified images (below threshold)
+    # Record total feature results, before dropping unclassified rows
+    total_biovolume_um3 = df["biovolume_um3"].sum()
+    total_biomass_ugl = df["biomass_ugl"].sum()
+    total_frequency = len(df)
+    # Drop unclassified rows (below threshold)
     df = df[df["classified"]]
     # Make sure rows match (no empty biovolume values)
     assert not any(df.isna().any(axis=1))
-
     # Create intra-class divisions based on volume size
     if divisions:
         df = df.apply(divide_row, axis=1, args=((divisions, division_column)))
@@ -126,6 +139,8 @@ def process_sample(
     gdf.sort_values("biomass_ugl", ascending=False, inplace=True)
     # Drop classes without any predictions
     gdf.drop(gdf[gdf["frequency"] <= 0].index, inplace=True)
+    # Add totals to df
+    gdf.loc["Total"] = [total_frequency, total_biovolume_um3, total_biomass_ugl]
 
     return gdf
 
