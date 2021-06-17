@@ -1,9 +1,40 @@
 """Helper functions for creating plots."""
+import datetime
+from pathlib import Path
 
 import cv2
 import numpy as np
+import pandas as pd
 import torch
 from matplotlib import pyplot as plt
+from matplotlib import units as munits
+from matplotlib.dates import ConciseDateConverter
+
+
+def class_plot(class_csv, columns_to_plot, ylabel="Biomass (μg/L)", out_file=None):
+    # Better datetime axis
+    munits.registry[datetime.datetime] = ConciseDateConverter()
+    # Change plot style
+    plt.style.use("seaborn-whitegrid")
+    if not out_file:
+        out_file = Path(class_csv).with_suffix(".png")
+    df = pd.read_csv(class_csv)
+    # Convert sample names to datetime with their timezones set to match Finland
+    df["Time"] = pd.to_datetime(df.Time).dt.tz_convert("Europe/Helsinki")
+    fig, axs = plt.subplots(
+        len(columns_to_plot), 1, figsize=(15, 10), sharex=True, constrained_layout=True
+    )
+    if len(columns_to_plot) < 2:
+        axs = [axs]
+    fig.text(-0.02, 0.5, ylabel, va="center", rotation="vertical", size=14)
+    if isinstance(columns_to_plot[0], int):
+        columns_to_plot = [df.columns[i] for i in columns_to_plot]
+    for name, ax in zip(columns_to_plot, axs):
+        ax.title.set_text(name.replace("_", " "))
+        ax.title.set_size(14)
+        ax.plot(df.Time, df[name])
+    plt.savefig(out_file, format="png", bbox_inches="tight")
+    plt.close()
 
 
 def view_batch(dataloader, h=None, w=None, save=None):
