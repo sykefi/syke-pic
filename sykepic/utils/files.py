@@ -42,3 +42,11 @@ def list_sample_paths(root_dir, filter=None):
     if filter is not None:
         path_gen = (path for path in path_gen if path.name in filter)
     return list(path_gen)
+
+
+def list_sample_csvs(root_dir, filter=None):
+    return [
+        path
+        for path in Path(root_dir).glob("**/*.csv")
+        if path.with_suffix("").stem in filter or not filter
+    ]

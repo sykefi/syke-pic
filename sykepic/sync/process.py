@@ -11,8 +11,8 @@ from botocore.exceptions import ClientError
 from requests import HTTPError
 
 from sykepic.utils import ifcb, logger
-from sykepic.utils.files import create_archive, list_sample_paths
-from sykepic.compute import feature, probability
+from sykepic.utils.files import create_archive, list_sample_paths, list_sample_csvs
+from sykepic.compute import feature, probability, classification
 
 RAW_SUFFIX = ".raw"
 log = logger.get_logger("sync")
@@ -57,6 +57,13 @@ def main(config_file):
     # Features
     feat_parallel = config.getboolean("features", "parallel")
     feat_force = config.getboolean("features", "force")
+
+    # Classification
+    class_csv = Path(config["classification"]["csv"])
+    class_bucket = s3.Bucket(config["classification"]["bucket"])
+    thresholds = Path(config["classification"]["thresholds"])
+    divisions = config.get("classification", "divisions")
+    divisions = Path(divisions) if divisions else None
 
     # Upload
     upload_time = datetime.strptime(config["upload"]["time"], "%H:%M")
@@ -125,7 +132,7 @@ def main(config_file):
                 else:
                     log.warning(
                         f"{day_path} can't be re-uploaded, "
-                        "since it's older than {keep} days"
+                        f"since it's older than {keep} days"
                     )
 
             if samples_downloaded:
@@ -147,26 +154,43 @@ def main(config_file):
                     force=prob_force,
                     progress_bar=False,
                 )
-                sample_paths_prob = list_sample_paths(local_raw, filter=samples_prob)
-                log.debug(f"Extracting features for {len(sample_paths_prob)} samples")
                 if samples_prob:
+                    sample_paths_prob = list_sample_paths(
+                        local_raw, filter=samples_prob
+                    )
+                    log.debug(
+                        f"Extracting features for {len(sample_paths_prob)} samples"
+                    )
                     samples_feat = feature.main(
                         sample_paths_prob,
                         local_feat,
                         parallel=feat_parallel,
                         force=feat_force,
                     )
-                    # Add to process_record those that were successfully processed
                     samples_processed = samples_downloaded.intersection(samples_feat)
+
+                if samples_processed:
+                    # Make classifications and update csv
+                    new_probs = list_sample_csvs(local_prob, samples_processed)
+                    new_feats = list_sample_csvs(local_feat, samples_processed)
+                    if new_probs and new_feats:
+                        log.debug(f"Updating {class_bucket.name}/{class_csv.name}")
+                        class_df = classification.class_df(
+                            new_probs, new_feats, thresholds, divisions
+                        )
+                        class_df = classification.swell_df(class_df)
+                        classification.df_to_csv(class_df, class_csv, append=True)
+                        class_bucket.upload_file(str(class_csv), class_csv.name)
+                    # Add to process_record those that were successfully processed
                     process_record.update(samples_processed)
                     for sample in sorted(samples_processed):
                         log.info(f"{sample} processed")
                     write_record(
                         process_record, config["local"]["process_record"], "process-"
                     )
+
                 # Remove those downloaded samples that were unsuccessful.
-                # This can happen, because apparently boto3 is fine with downloading
-                # partially uploaded files...
+                # This happens when incomplete objects were uploaded to s3
                 samples_failed = samples_downloaded.difference(samples_processed)
                 for sample in sorted(samples_failed):
                     log.warning(f"{sample} failed to process")
@@ -222,8 +246,8 @@ def main(config_file):
             remove(local_prob, keep, remove_prob_files, remove_prob_archive)
             remove(local_feat, keep, remove_feat_files, remove_feat_archive)
             if remove_from_process_record:
-                # Remove old (older than keep) samples from process record
-                process_record = clean_process_record(process_record, keep)
+                # Trim process record regularly
+                process_record = clean_process_record(process_record, keep + 7)
                 write_record(
                     process_record, config["local"]["process_record"], "process-"
                 )
