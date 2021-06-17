@@ -72,10 +72,10 @@ class PredictionViewer:
             ), "Labeling and evaluation is allowed one sample a time"
             self.img_dir = {}
             for csv in predictions:
-                sample = Path(csv).with_suffix("").name
+                sample = Path(csv).with_suffix("").stem
                 self.img_dir[sample] = self.work_dir / "images" / sample
         else:
-            self.sample = Path(predictions).with_suffix("").name
+            self.sample = Path(predictions).with_suffix("").stem
             self.img_dir = self.work_dir / "images" / self.sample
 
         self.df = prediction_dataframe(predictions, thresholds)

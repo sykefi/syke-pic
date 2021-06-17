@@ -12,7 +12,7 @@ def prediction_dataframe(probabilities, thresholds=0.0):
         for csv in probabilities:
             df = pd.read_csv(csv)
             # Create multi-index from sample name and roi number
-            df.insert(0, "sample", Path(csv).stem)
+            df.insert(0, "sample", Path(csv).with_suffix("").stem)
             df.set_index(["sample", "roi"], inplace=True)
             df_list.append(df)
         df = pd.concat(df_list)

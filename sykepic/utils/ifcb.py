@@ -62,7 +62,7 @@ def extract_sample_images(sample, raw_dir, out_dir, exist_ok=False):
         log.error(f"Sample {sample} not found in {raw_dir}")
         raise
     roi = adc.with_suffix(".roi")
-    raw_to_png(adc, roi, out_dir, exist_ok=exist_ok)
+    raw_to_png(adc, roi, out_dir, force=exist_ok)
 
 
 def raw_to_png(adc, roi, out_dir=None, force=False):
