@@ -6,7 +6,7 @@ with open("README.md") as fh:
 
 setup(
     name="syke-pic",
-    version="0.2.0",
+    version="0.3.0",
     packages=find_packages(),
     description="Plankton image classification with neural networks",
     long_description=long_description,
