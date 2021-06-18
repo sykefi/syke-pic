@@ -21,3 +21,4 @@ dependencies:
         - opencv-python-headless
         - phasepack
         - pyfftw
+        - pytest

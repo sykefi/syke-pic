@@ -11,7 +11,7 @@ from sykepic.train.image import Compose
 
 @pytest.fixture
 def net_and_params():
-    model_dir = "examples/models/resnet18_20201022"
+    model_dir = "tests/models/resnet18_20201022"
     net, classes, img_shape, eval_transform, device = probability.prepare_model(
         model_dir
     )
@@ -31,7 +31,7 @@ def test_main(tmp_path):
         Path("tests/data/raw/valid/D20180712T065600_IFCB114"),
         Path("tests/data/raw/invalid/D20210523T053149_IFCB114"),
     ]
-    model_dir = "examples/models/resnet18_20201022"
+    model_dir = "tests/models/resnet18_20201022"
     out_dir = tmp_path / "prob"
     samples_processed = probability.main(
         sample_paths,
@@ -47,7 +47,7 @@ def test_main(tmp_path):
 
 
 def test_prepare_model():
-    model_dir = "examples/models/resnet18_20201022"
+    model_dir = "tests/models/resnet18_20201022"
     net, classes, img_shape, eval_transform, device = probability.prepare_model(
         model_dir
     )
