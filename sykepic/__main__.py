@@ -16,8 +16,17 @@ Note: Make sure you are using the correct python environment.
 from argparse import ArgumentParser
 
 from sykepic.train import train, dataset
-from sykepic.predict import predict, sync
+from sykepic.compute import probability, classification
 from sykepic.utils import logger
+
+try:
+    from sykepic.compute import feature
+    from sykepic.sync import process
+
+    ifcb_features = True
+except ModuleNotFoundError:
+    print("[WARNING] ifcb-features not installed, feat and sync not available")
+    ifcb_features = False
 
 
 def main():
@@ -51,73 +60,139 @@ def main():
         "--dist", metavar="FILE", help="Save a class distribution plot to FILE"
     )
 
-    # Parser for 'sykepic predict'
-    predict_parser = subparsers.add_parser(
-        "predict", description="Use a trained classifier for inference"
+    # Parser for 'sykepic prob'
+    prob_parser = subparsers.add_parser(
+        "prob", description="Calculate class probabilities"
     )
-    predict_parser.set_defaults(func=predict.main)
-    predict_parser.add_argument("model", help="Model directory")
-    predict_parser.add_argument("raw", help="Root directory of raw IFCB data")
-    predict_parser.add_argument("out", help="Root output directory")
-    predict_parser.add_argument(
-        "-b", "--batch_size", type=int, default=64, metavar="INT", help="Default is 64"
+    prob_parser.set_defaults(func=probability.call)
+    prob_raw = prob_parser.add_mutually_exclusive_group(required=True)
+    prob_raw.add_argument(
+        "-r", "--raw", metavar="DIR", help="Root directory of raw IFCB data"
     )
-    predict_parser.add_argument(
-        "-w", "--num_workers", type=int, default=2, metavar="INT", help="Default is 2"
+    prob_raw.add_argument(
+        "-s",
+        "--samples",
+        nargs="+",
+        metavar="PATH",
+        help="One or more sample paths (raw file without suffix)",
     )
-    predict_parser.add_argument(
-        "-l",
-        "--limit",
-        type=int,
-        metavar="INT",
-        help=(
-            "Limit how many samples to process. "
-            "Samples will be drawn evenly from raw directory."
-        ),
+    prob_parser.add_argument("-m", "--model", required=True, help="Model directory")
+    prob_parser.add_argument("-o", "--out", required=True, help="Root output directory")
+    prob_parser.add_argument(
+        "-b", "--batch-size", type=int, default=64, metavar="INT", help="Default is 64"
     )
-    predict_parser.add_argument(
-        "-e",
-        "--softmax_exp",
-        default=1.3,
-        metavar="FLOAT",
-        help=("Exponent to use in softmax, use 'e' for normal softmax"),
+    prob_parser.add_argument(
+        "-w", "--num-workers", type=int, default=2, metavar="INT", help="Default is 2"
     )
-    predict_parser.add_argument(
+    prob_parser.add_argument(
         "-f",
         "--force",
         action="store_true",
-        help="Force overwrite of any previous predictions",
+        help="Force overwrite of previous probabilities",
     )
-    # predict_parser.add_argument(
-    #     '--allas', metavar='PATH',
-    #     help='Path to bucket or directory in Allas with raw files'
-    # )
 
-    # Parser for 'sykepic sync'
-    sync_parser = subparsers.add_parser(
-        "sync", description="Synchronization service with Allas"
-    )
-    sync_parser.set_defaults(func=sync.main)
-    sync_parser.add_argument("config", metavar="FILE", help="Configuration file")
+    # Parser for 'sykepic feat'
+    if ifcb_features:
+        feat_parser = subparsers.add_parser("feat", description="Extract features")
+        feat_parser.set_defaults(func=feature.call)
+        feat_raw = feat_parser.add_mutually_exclusive_group(required=True)
+        feat_raw.add_argument(
+            "-r", "--raw", metavar="DIR", help="Root directory of raw IFCB data"
+        )
+        feat_raw.add_argument(
+            "-s",
+            "--samples",
+            nargs="+",
+            metavar="PATH",
+            help="One or more sample paths (raw file without suffix)",
+        )
+        feat_parser.add_argument(
+            "-o", "--out", required=True, help="Root output directory"
+        )
+        feat_parser.add_argument(
+            "-p", "--parallel", action="store_true", help="Use multiple cores"
+        )
+        feat_parser.add_argument(
+            "-f",
+            "--force",
+            action="store_true",
+            help="Force overwrite of previous features",
+        )
 
-    # Parser for 'sykepic dataset'
-    dataset_parser = subparsers.add_parser(
-        "dataset", description="Create a usable dataset"
+    if ifcb_features:
+        # Parser for 'sykepic sync'
+        sync_parser = subparsers.add_parser(
+            "sync", description="Process IFCB data in an infinite loop"
+        )
+        sync_parser.set_defaults(func=process.call)
+        sync_parser.add_argument("config", metavar="FILE", help="Configuration file")
+
+        # Parser for 'sykepic dataset'
+        dataset_parser = subparsers.add_parser(
+            "dataset", description="Create a usable dataset"
+        )
+        dataset_parser.set_defaults(func=dataset.main)
+        dataset_parser.add_argument("original", help="Original dataset path")
+        dataset_parser.add_argument("new", help="New dataset path")
+        dataset_parser.add_argument(
+            "--min",
+            type=int,
+            metavar="INT",
+            help="Mininmum amount of samples per class",
+        )
+        dataset_parser.add_argument(
+            "--max",
+            type=int,
+            metavar="INT",
+            help="Maximum amount samples per class, with random sampling.",
+        )
+        dataset_parser.add_argument(
+            "--exclude", nargs="*", default=[], help="Sub-directories to exlude"
+        )
+
+    # Parser for `sykepic class`
+    class_parser = subparsers.add_parser("class", description="Classify samples")
+    class_parser.set_defaults(func=classification.main)
+    class_parser.add_argument("probabilities", help="Root directory of probabilities")
+    class_parser.add_argument("features", help="Root directory of features")
+    class_parser.add_argument(
+        "-t",
+        "--thresholds",
+        metavar="FILE",
+        required=True,
+        help="Probability thresholds file (required)",
     )
-    dataset_parser.set_defaults(func=dataset.main)
-    dataset_parser.add_argument("original", help="Original dataset path")
-    dataset_parser.add_argument("new", help="New dataset path")
-    dataset_parser.add_argument(
-        "--min", type=int, metavar="INT", help="Mininmum amount of samples per class"
+    class_parser.add_argument(
+        "-d",
+        "--divisions",
+        metavar="FILE",
+        help="Feature divisions file (optional)",
     )
-    dataset_parser.add_argument(
-        "--max",
-        type=int,
-        metavar="INT",
-        help="Maximum amount samples per class, with random sampling.",
+    class_parser.add_argument(
+        "-o",
+        "--out",
+        metavar="PATH",
+        required=True,
+        help="Output CSV-file path (required)",
     )
-    dataset_parser.add_argument(
-        "--exclude", nargs="*", default=[], help="Sub-directories to exlude"
+    class_parser.add_argument(
+        "-s",
+        "--summarize",
+        metavar="FEATURE",
+        default="biomass_ugl",
+        help="Which feature to summarize, default is biomass_ugl",
+    )
+    class_parser.add_argument(
+        "-a",
+        "--append",
+        action="store_true",
+        help="Append to output file if it exists",
+    )
+    class_parser.add_argument(
+        "-f",
+        "--force",
+        action="store_true",
+        help="Overwrite output file if it exists",
     )
 
     # Get arguments for the subparser specified

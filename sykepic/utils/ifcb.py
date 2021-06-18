@@ -7,6 +7,10 @@ from pathlib import Path
 import cv2
 import numpy as np
 
+from . import logger
+
+log = logger.get_logger("ifcb")
+
 
 def sample_to_datetime(sample):
     """Parse IFCB sample name into a datetime object
@@ -55,13 +59,13 @@ def extract_sample_images(sample, raw_dir, out_dir, exist_ok=False):
     try:
         adc = next(Path(raw_dir).glob(f"**/{sample}.adc"))
     except StopIteration:
-        print(f"[ERROR] Sample '{sample}' not found in '{raw_dir}'")
+        log.error(f"Sample {sample} not found in {raw_dir}")
         raise
     roi = adc.with_suffix(".roi")
-    raw_to_png(adc, roi, out_dir, exist_ok=exist_ok)
+    raw_to_png(adc, roi, out_dir, force=exist_ok)
 
 
-def raw_to_png(adc, roi, out_dir=None, limit=None, exist_ok=False):
+def raw_to_png(adc, roi, out_dir=None, force=False):
     """Parses .adc and .roi files into PNG images
 
     Parameters
@@ -72,22 +76,17 @@ def raw_to_png(adc, roi, out_dir=None, limit=None, exist_ok=False):
         Path to .roi-file
     out_dir : str, Path
         Defaults to adc-file's stem
-    limit : int
-        Optional limit on how many roi to parse
-    exist_ok : bool
-        Whether to allow overwriting to existing out_dir
+    force : bool
+        Overwrite existing images in out_dir
     """
 
     adc = Path(adc)
     roi = Path(roi)
-    out_dir = Path(out_dir)
     for f in (adc, roi):
         if not f.is_file():
             raise FileNotFoundError(f)
-    if not out_dir:
-        out_dir = Path(adc.with_suffix(""))
-    Path.mkdir(out_dir, parents=True, exist_ok=exist_ok)
-
+    out_dir = Path(adc.with_suffix("")) if not out_dir else Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=force)
     # Read bytes from .roi-file into 8-bit integers
     roi_data = np.fromfile(roi, dtype="uint8")
     # Parse each line of .adc-file
@@ -100,18 +99,38 @@ def raw_to_png(adc, roi, out_dir=None, limit=None, exist_ok=False):
             # Skip empty roi
             if roi_x < 1 or roi_y < 1:
                 continue
-            try:
-                # roi_data is a 1-dimensional array, where
-                # all roi are stacked one after another.
-                end = start + (roi_x * roi_y)
-                # Reshape into 2-dimensions
-                img = roi_data[start:end].reshape((roi_y, roi_x))
-                img_path = out_dir / f"{i}.png"
-                # imwrite reshapes automatically to 3-dimensions (RGB)
-                cv2.imwrite(str(img_path), img)
-            except Exception as e:
-                print(f"[ERROR] {adc.name} line {i}: {e}")
-                # with open(out_dir/'errors.log', 'a') as log_fh:
-                #     log_fh.write(f'{adc.name}: line {i}: {e}\n')
-            if limit and i >= limit:
-                break
+            # roi_data is a 1-dimensional array, where
+            # all roi are stacked one after another.
+            end = start + (roi_x * roi_y)
+            # Reshape into 2-dimensions
+            img = roi_data[start:end].reshape((roi_y, roi_x))
+            img_path = out_dir / f"{i}.png"
+            # imwrite reshapes automatically to 3-dimensions (RGB)
+            cv2.imwrite(str(img_path), img)
+
+
+def raw_to_numpy(adc, roi):
+    adc = Path(adc)
+    # Read bytes from .roi-file into 8-bit integers
+    roi_data = np.fromfile(roi, dtype="uint8")
+    # Parse each line of .adc-file
+    with adc.open() as adc_fh:
+        for i, adc_line in enumerate(adc_fh, start=1):
+            np_arr = next_roi(roi_data, adc_line)
+            if np_arr is not None:
+                yield i, np_arr
+
+
+def next_roi(roi_data, adc_line):
+    adc_line = adc_line.split(",")
+    roi_x = int(adc_line[15])  # ROI width
+    roi_y = int(adc_line[16])  # ROI height
+    # Skip empty roi
+    if roi_x < 1 or roi_y < 1:
+        return None
+    # roi_data is a 1-dimensional array, where
+    # all roi are stacked one after another.
+    start = int(adc_line[17])  # start byte
+    end = start + (roi_x * roi_y)
+    # Reshape into 2-dimensions
+    return roi_data[start:end].reshape((roi_y, roi_x))
