@@ -61,10 +61,11 @@ def sample_features(sample_path):
     roi = root.with_suffix(".roi")
     try:
         volume_ml = sample_volume(hdr)
-        if volume_ml <= 0:
-            log.warn(f"{root.name} volume_ml is {volume_ml}")
+        # This didn't show in logs for some reason
+        # if volume_ml <= 0:
+        #   log.warn(f"{root.name} volume_ml is {volume_ml}")
     except Exception:
-        log.exception(f"Unable to calculate sample volume for {root.name}")
+        log.exception(f"Unable to calculate volume for {root.name}")
         return None
     roi_features = []
     for roi_id, roi_array in ifcb.raw_to_numpy(adc, roi):
@@ -100,7 +101,9 @@ def sample_volume(hdr_file):
                 inhibit_time = float(line.split()[1])
             elif line.startswith("runTime"):
                 run_time = float(line.split()[1])
-    sample_vol = ifcb_flowrate * ((run_time - inhibit_time) / 60)
+    sample_vol = ifcb_flowrate * ((run_time - inhibit_time) / 60.0)
+    if sample_vol < 0:
+        raise ValueError(f"Sample volume is {sample_vol}")
     return sample_vol
 
 

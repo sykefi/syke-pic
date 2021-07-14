@@ -10,9 +10,10 @@ import boto3
 from botocore.exceptions import ClientError
 from requests import HTTPError
 
+from sykepic import APP_DIR
 from sykepic.utils import ifcb, logger
 from sykepic.utils.files import create_archive, list_sample_paths, list_sample_csvs
-from sykepic.compute import feature, probability, classification
+from sykepic.compute import probability, feature_matlab, classification
 
 RAW_SUFFIX = ".raw"
 log = logger.get_logger("sync")
@@ -55,8 +56,8 @@ def main(config_file):
     prob_force = config.getboolean("probabilities", "force")
 
     # Features
-    feat_parallel = config.getboolean("features", "parallel")
-    feat_force = config.getboolean("features", "force")
+    matlab_bin = config["features"]["matlab"]
+    APP_DIR.mkdir(exist_ok=True)
 
     # Classification
     class_csv = Path(config["classification"]["csv"])
@@ -161,11 +162,10 @@ def main(config_file):
                     log.debug(
                         f"Extracting features for {len(sample_paths_prob)} samples"
                     )
-                    samples_feat = feature.main(
+                    samples_feat = feature_matlab.main(
+                        matlab_bin,
                         sample_paths_prob,
                         local_feat,
-                        parallel=feat_parallel,
-                        force=feat_force,
                     )
                     samples_processed = samples_downloaded.intersection(samples_feat)
 
@@ -222,7 +222,7 @@ def main(config_file):
                 local_feat,
                 feat_upload_dir,
                 upload_bucket,
-                suffix=feature.FILE_SUFFIX,
+                suffix=feature_matlab.FILE_SUFFIX,
             )
             if uploaded_raw != uploaded_prob != uploaded_feat:
                 log.warning(
@@ -245,6 +245,9 @@ def main(config_file):
             )
             remove(local_prob, keep, remove_prob_files, remove_prob_archive)
             remove(local_feat, keep, remove_feat_files, remove_feat_archive)
+            # Remove Matlab features
+            shutil.rmtree(APP_DIR / "blob")
+            shutil.rmtree(APP_DIR / "feat")
             if remove_from_process_record:
                 # Trim process record regularly
                 process_record = clean_process_record(process_record, keep + 7)
