@@ -51,11 +51,11 @@ def class_df(
     # Ensure probs and feats match
     if len(probs) != len(feats):
         iterator = (
-                (p, f)
-                for f in sorted(feats)
-                for p in sorted(probs)
-                if p.with_suffix("").stem == f.with_suffix("").stem
-                )
+            (p, f)
+            for f in sorted(feats)
+            for p in sorted(probs)
+            if p.with_suffix("").stem == f.with_suffix("").stem
+        )
     else:
         iterator = zip(sorted(probs), sorted(feats))
     # Add a tqdm progress bar optionally
