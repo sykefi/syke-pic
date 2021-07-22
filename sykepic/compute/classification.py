@@ -47,11 +47,21 @@ def class_df(
     thresholds = threshold_dictionary(thresholds_file)
     # Read feature divisions (optional)
     divisions = read_divisions(divisions_file) if divisions_file else None
-
     df_rows = []
-    iterator = zip(sorted(probs), sorted(feats))
+    # Ensure probs and feats match
+    if len(probs) != len(feats):
+        iterator = (
+                (p, f)
+                for f in sorted(feats)
+                for p in sorted(probs)
+                if p.with_suffix("").stem == f.with_suffix("").stem
+                )
+    else:
+        iterator = zip(sorted(probs), sorted(feats))
+    # Add a tqdm progress bar optionally
     if progress_bar:
-        iterator = tqdm(list(iterator), desc=f"Processing {len(probs)} samples")
+        iterator = tqdm(list(iterator), desc=f"Processing {len(feats)} samples")
+
     for prob_csv, feat_csv in iterator:
         # Check that CSVs match
         if prob_csv.with_suffix("").stem != feat_csv.with_suffix("").stem:

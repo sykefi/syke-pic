@@ -92,11 +92,14 @@ def call_matlab(bin, command, name="Matlab"):
 
 def sample_features(sample_path, mat_feat_dir):
     try:
+        feat_df = pd.read_csv(mat_feat_dir / f"{sample_path.stem}_fea_v2.csv")
         volume_ml = sample_volume(sample_path.with_suffix(".hdr"))
+    except FileNotFoundError:
+        log.exception(f"Matlab features missing for {sample_path.name}")
+        return None
     except Exception:
         log.exception(f"Unable to calculate volume for {sample_path.name}")
         return None
-    feat_df = pd.read_csv(mat_feat_dir / f"{sample_path.stem}_fea_v2.csv")
     biovolume_um3 = pixels_to_um3(feat_df["Biovolume"])
     feat_df["biovolume_um3"] = biovolume_um3
     feat_df["biomass_ugl"] = biovolume_to_biomass(biovolume_um3, volume_ml)
