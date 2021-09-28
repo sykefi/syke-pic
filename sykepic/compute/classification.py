@@ -5,8 +5,12 @@ from pathlib import Path
 import pandas as pd
 from tqdm import tqdm
 
+from sykepic.utils import logger
 from sykepic.utils.ifcb import sample_to_datetime
 from .prediction import prediction_dataframe, threshold_dictionary
+
+DOLI_COILED_FACTOR_V2 = 7.056
+log = logger.get_logger("class")
 
 
 def main(args):
@@ -43,18 +47,32 @@ def class_df(
     thresholds = threshold_dictionary(thresholds_file)
     # Read feature divisions (optional)
     divisions = read_divisions(divisions_file) if divisions_file else None
-
     df_rows = []
-    iterator = zip(sorted(probs), sorted(feats))
+    # Ensure probs and feats match
+    if len(probs) != len(feats):
+        iterator = (
+            (p, f)
+            for f in sorted(feats)
+            for p in sorted(probs)
+            if p.with_suffix("").stem == f.with_suffix("").stem
+        )
+    else:
+        iterator = zip(sorted(probs), sorted(feats))
+    # Add a tqdm progress bar optionally
     if progress_bar:
-        iterator = tqdm(list(iterator), desc=f"Processing {len(probs)} samples")
+        iterator = tqdm(list(iterator), desc=f"Processing {len(feats)} samples")
+
     for prob_csv, feat_csv in iterator:
         # Check that CSVs match
         if prob_csv.with_suffix("").stem != feat_csv.with_suffix("").stem:
             raise ValueError(f"CSV mismatch: {prob_csv.name} & {feat_csv.name}")
         sample = prob_csv.with_suffix("").stem
         # Join prob, feat and classifications in one df
-        sample_df = process_sample(prob_csv, feat_csv, thresholds, divisions)
+        try:
+            sample_df = process_sample(prob_csv, feat_csv, thresholds, divisions)
+        except KeyError:
+            log.exception(prob_csv.with_suffix("").stem)
+            continue
         # Select specific feature to summarize
         sample_column = sample_df[summary_feature]
         sample_column.name = sample
@@ -142,6 +160,20 @@ def process_sample(
     # Add totals to df
     gdf.loc["Total"] = [total_frequency, total_biovolume_um3, total_biomass_ugl]
 
+    # Read feature extraction version from csv
+    with open(feat_csv) as fh:
+        feat_version = int(fh.readline().strip().split("=")[1])
+    if feat_version == 2:
+        # Apply conversion factor for "Dolichospermum-Anabaenopsis-coiled"
+        try:
+            gdf.loc["Dolichospermum-Anabaenopsis-coiled"][
+                "biovolume_um3"
+            ] /= DOLI_COILED_FACTOR_V2
+            gdf.loc["Dolichospermum-Anabaenopsis-coiled"][
+                "biomass_ugl"
+            ] /= DOLI_COILED_FACTOR_V2
+        except KeyError:
+            pass
     return gdf
 
 

@@ -9,7 +9,6 @@ dependencies:
     - jupyter
     - matplotlib
     - scikit-learn
-    - scikit-image
     - tqdm
     - boto3
     - requests
@@ -19,6 +18,4 @@ dependencies:
     - cpuonly
     - pip:
         - opencv-python-headless
-        - phasepack
-        - pyfftw
         - pytest

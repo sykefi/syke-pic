@@ -16,17 +16,9 @@ Note: Make sure you are using the correct python environment.
 from argparse import ArgumentParser
 
 from sykepic.train import train, dataset
-from sykepic.compute import probability, classification
+from sykepic.compute import probability, feature_matlab, classification, size_group
 from sykepic.utils import logger
-
-try:
-    from sykepic.compute import feature
-    from sykepic.sync import process
-
-    ifcb_features = True
-except ModuleNotFoundError:
-    print("[WARNING] ifcb-features not installed, feat and sync not available")
-    ifcb_features = False
+from sykepic.sync import process
 
 
 def main():
@@ -92,63 +84,53 @@ def main():
     )
 
     # Parser for 'sykepic feat'
-    if ifcb_features:
-        feat_parser = subparsers.add_parser("feat", description="Extract features")
-        feat_parser.set_defaults(func=feature.call)
-        feat_raw = feat_parser.add_mutually_exclusive_group(required=True)
-        feat_raw.add_argument(
-            "-r", "--raw", metavar="DIR", help="Root directory of raw IFCB data"
-        )
-        feat_raw.add_argument(
-            "-s",
-            "--samples",
-            nargs="+",
-            metavar="PATH",
-            help="One or more sample paths (raw file without suffix)",
-        )
-        feat_parser.add_argument(
-            "-o", "--out", required=True, help="Root output directory"
-        )
-        feat_parser.add_argument(
-            "-p", "--parallel", action="store_true", help="Use multiple cores"
-        )
-        feat_parser.add_argument(
-            "-f",
-            "--force",
-            action="store_true",
-            help="Force overwrite of previous features",
-        )
+    feat_parser = subparsers.add_parser("feat", description="Extract features")
+    feat_parser.set_defaults(func=feature_matlab.call)
+    feat_parser.add_argument("-m", "--matlab", required=True, help="Matlab binary path")
+    feat_raw = feat_parser.add_mutually_exclusive_group(required=True)
+    feat_raw.add_argument(
+        "-r", "--raw", metavar="DIR", help="Root directory of raw IFCB data"
+    )
+    feat_raw.add_argument(
+        "-s",
+        "--samples",
+        nargs="+",
+        metavar="PATH",
+        help="One or more sample paths (raw file without suffix)",
+    )
+    feat_parser.add_argument(
+        "-o", "--out", metavar="DIR", required=True, help="Root output directory"
+    )
 
-    if ifcb_features:
-        # Parser for 'sykepic sync'
-        sync_parser = subparsers.add_parser(
-            "sync", description="Process IFCB data in an infinite loop"
-        )
-        sync_parser.set_defaults(func=process.call)
-        sync_parser.add_argument("config", metavar="FILE", help="Configuration file")
+    # Parser for 'sykepic sync'
+    sync_parser = subparsers.add_parser(
+        "sync", description="Process IFCB data in an infinite loop"
+    )
+    sync_parser.set_defaults(func=process.call)
+    sync_parser.add_argument("config", metavar="FILE", help="Configuration file")
 
-        # Parser for 'sykepic dataset'
-        dataset_parser = subparsers.add_parser(
-            "dataset", description="Create a usable dataset"
-        )
-        dataset_parser.set_defaults(func=dataset.main)
-        dataset_parser.add_argument("original", help="Original dataset path")
-        dataset_parser.add_argument("new", help="New dataset path")
-        dataset_parser.add_argument(
-            "--min",
-            type=int,
-            metavar="INT",
-            help="Mininmum amount of samples per class",
-        )
-        dataset_parser.add_argument(
-            "--max",
-            type=int,
-            metavar="INT",
-            help="Maximum amount samples per class, with random sampling.",
-        )
-        dataset_parser.add_argument(
-            "--exclude", nargs="*", default=[], help="Sub-directories to exlude"
-        )
+    # Parser for 'sykepic dataset'
+    dataset_parser = subparsers.add_parser(
+        "dataset", description="Create a usable dataset"
+    )
+    dataset_parser.set_defaults(func=dataset.main)
+    dataset_parser.add_argument("original", help="Original dataset path")
+    dataset_parser.add_argument("new", help="New dataset path")
+    dataset_parser.add_argument(
+        "--min",
+        type=int,
+        metavar="INT",
+        help="Mininmum amount of samples per class",
+    )
+    dataset_parser.add_argument(
+        "--max",
+        type=int,
+        metavar="INT",
+        help="Maximum amount samples per class, with random sampling.",
+    )
+    dataset_parser.add_argument(
+        "--exclude", nargs="*", default=[], help="Sub-directories to exlude"
+    )
 
     # Parser for `sykepic class`
     class_parser = subparsers.add_parser("class", description="Classify samples")
@@ -193,6 +175,55 @@ def main():
         "--force",
         action="store_true",
         help="Overwrite output file if it exists",
+    )
+
+    # Parser for 'sykepic size'
+    size_parser = subparsers.add_parser("size", description="Extract size groups")
+    size_parser.set_defaults(func=size_group.call)
+    size_parser.add_argument("features", help="Root directory of features")
+    size_parser.add_argument(
+        "-g",
+        "--groups",
+        metavar="FILE",
+        required=True,
+        help="Size group file (required)",
+    )
+    size_parser.add_argument(
+        "-c",
+        "--column",
+        metavar="FEATURE",
+        required=True,
+        help="Feature used to group (required)",
+    )
+    size_parser.add_argument(
+        "-o",
+        "--out",
+        metavar="PATH",
+        required=True,
+        help="Output CSV-file path (required)",
+    )
+    size_parser.add_argument(
+        "-a",
+        "--append",
+        action="store_true",
+        help="Append to output file if it exists",
+    )
+    size_parser.add_argument(
+        "-f",
+        "--force",
+        action="store_true",
+        help="Overwrite output file if it exists",
+    )
+    size_parser.add_argument(
+        "--pixels-to-um3",
+        action="store_true",
+        help="Convert pixels to um3 before determining size group",
+    )
+    size_parser.add_argument(
+        "-q",
+        "--quiet",
+        action="store_true",
+        help="Don't display progress bar",
     )
 
     # Get arguments for the subparser specified

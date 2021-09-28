@@ -1,6 +1,7 @@
 name: sykepic
 channels:
     - pytorch
+    - nvidia
 dependencies:
     - python
     - pip
@@ -9,16 +10,13 @@ dependencies:
     - jupyter
     - matplotlib
     - scikit-learn
-    - scikit-image
     - tqdm
     - boto3
     - requests
     - pyyaml
     - pytorch
     - torchvision
-    - cudatoolkit=10.2
+    - cudatoolkit=11.1
     - pip:
         - opencv-python-headless
-        - phasepack
-        - pyfftw
         - pytest
