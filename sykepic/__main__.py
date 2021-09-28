@@ -16,7 +16,7 @@ Note: Make sure you are using the correct python environment.
 from argparse import ArgumentParser
 
 from sykepic.train import train, dataset
-from sykepic.compute import probability, feature_matlab, classification
+from sykepic.compute import probability, feature_matlab, classification, size_group
 from sykepic.utils import logger
 from sykepic.sync import process
 
@@ -175,6 +175,55 @@ def main():
         "--force",
         action="store_true",
         help="Overwrite output file if it exists",
+    )
+
+    # Parser for 'sykepic size'
+    size_parser = subparsers.add_parser("size", description="Extract size groups")
+    size_parser.set_defaults(func=size_group.call)
+    size_parser.add_argument("features", help="Root directory of features")
+    size_parser.add_argument(
+        "-g",
+        "--groups",
+        metavar="FILE",
+        required=True,
+        help="Size group file (required)",
+    )
+    size_parser.add_argument(
+        "-c",
+        "--column",
+        metavar="FEATURE",
+        required=True,
+        help="Feature used to group (required)",
+    )
+    size_parser.add_argument(
+        "-o",
+        "--out",
+        metavar="PATH",
+        required=True,
+        help="Output CSV-file path (required)",
+    )
+    size_parser.add_argument(
+        "-a",
+        "--append",
+        action="store_true",
+        help="Append to output file if it exists",
+    )
+    size_parser.add_argument(
+        "-f",
+        "--force",
+        action="store_true",
+        help="Overwrite output file if it exists",
+    )
+    size_parser.add_argument(
+        "--pixels-to-um3",
+        action="store_true",
+        help="Convert pixels to um3 before determining size group",
+    )
+    size_parser.add_argument(
+        "-q",
+        "--quiet",
+        action="store_true",
+        help="Don't display progress bar",
     )
 
     # Get arguments for the subparser specified
