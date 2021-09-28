@@ -22,11 +22,6 @@ First step is to download the code to your machine:
 git clone https://github.com/veot/syke-pic
 ```
 
-__NEW:__ [ifcb-features](https://github.com/veot/ifcb-features) is also required:
-```sh
-git clone https://github.com/veot/ifcb-features
-```
-
 ### Requirements
 
 The Conda package and environment management system is recommended. See https://docs.conda.io/en/latest/ for instructions.
@@ -57,18 +52,12 @@ pip install syke-pic/
 
 This command installs a Python package and an executable program, both named `sykepic`.
 
-Next, install `ifcb-features` with:
-```sh
-pip install ifcb-features/
-```
-
 ### Development configuration (optional)
 
-Install the packages in editable mode instead:
+Install in editable mode instead:
 
 ```sh
 pip install -e syke-pic/
-pip install -e ifcb-features/
 ```
 
 Additional development requirements can be installed with
@@ -77,16 +66,10 @@ Additional development requirements can be installed with
 pip install -r sykepic/envs/dev-requirements.txt
 ```
 
-### Tests
-To ensure a working installation, run the tests with:
-```sh
-cd syke-pic && pytest .
-```
-If everything passes, the program should work as intended.
-
 ## Usage
 
 The main interface is from the command line. Invoke the help menu with:
+
 ```sh
 sykepic --help
 ```
