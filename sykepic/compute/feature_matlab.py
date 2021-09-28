@@ -25,6 +25,7 @@ def main(bin, sample_paths, feat_dir):
     feat_dir = Path(feat_dir)
     mat_blob_dir = APP_DIR / "blob"
     mat_feat_dir = APP_DIR / "feat"
+    APP_DIR.mkdir(exist_ok=True)
     # IFCB-analysis throws error if trying to run in parallel with just one sample
     parallel = "true" if len(sample_paths) > 1 else ""
     with (TemporaryDirectory(prefix="tmp-", dir=APP_DIR)) as sym_dir:
@@ -54,7 +55,7 @@ def main(bin, sample_paths, feat_dir):
             with open(out_csv, "w") as fh:
                 fh.write(f"# version={VERSION}\n# volume_ml={volume}\n")
                 feat_df.to_csv(fh, index=False)
-            samples_processed.add(sample_path.stem)
+        samples_processed.add(sample_path.stem)
     return samples_processed
 
 
@@ -92,7 +93,7 @@ def call_matlab(bin, command, name="Matlab"):
 
 def sample_features(sample_path, mat_feat_dir):
     try:
-        feat_df = pd.read_csv(mat_feat_dir / f"{sample_path.stem}_fea_v2.csv")
+        feat_df = pd.read_csv(mat_feat_dir / f"{sample_path.stem}_fea_v{VERSION}.csv")
         volume_ml = sample_volume(sample_path.with_suffix(".hdr"))
     except FileNotFoundError:
         log.exception(f"Matlab features missing for {sample_path.name}")

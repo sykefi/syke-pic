@@ -246,8 +246,8 @@ def main(config_file):
             remove(local_prob, keep, remove_prob_files, remove_prob_archive)
             remove(local_feat, keep, remove_feat_files, remove_feat_archive)
             # Remove Matlab features
-            shutil.rmtree(APP_DIR / "blob")
-            shutil.rmtree(APP_DIR / "feat")
+            shutil.rmtree(APP_DIR / "blob", ignore_errors=True)
+            shutil.rmtree(APP_DIR / "feat", ignore_errors=True)
             if remove_from_process_record:
                 # Trim process record regularly
                 process_record = clean_process_record(process_record, keep + 7)
