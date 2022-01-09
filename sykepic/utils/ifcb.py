@@ -105,7 +105,7 @@ def raw_to_png(adc, roi, out_dir=None, force=False):
             end = start + (roi_x * roi_y)
             # Reshape into 2-dimensions
             img = roi_data[start:end].reshape((roi_y, roi_x))
-            img_path = out_dir / f"{sample}_{i:04}.png"
+            img_path = out_dir / f"{sample}_{i:05}.png"
             # imwrite reshapes automatically to 3-dimensions (RGB)
             cv2.imwrite(str(img_path), img)
 
