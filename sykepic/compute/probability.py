@@ -130,7 +130,7 @@ def net_pass(net, dataloader, device="cpu"):
         for batch in dataloader:
             x, paths = batch[0].to(device), batch[1]
             out = net(x)
-            rois = tuple(int(Path(p).stem) for p in paths)
+            rois = tuple(int(Path(p).stem.split("_")[-1]) for p in paths)
             # Change softmax exponent by multiplying by log(new_exponent)
             if SOFTMAX_EXP:
                 out = out * np.log(SOFTMAX_EXP)
