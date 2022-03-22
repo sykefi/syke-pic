@@ -51,6 +51,11 @@ def main():
     train_parser.add_argument(
         "--dist", metavar="FILE", help="Save a class distribution plot to FILE"
     )
+    train_parser.add_argument(
+        "--save-images",
+        metavar="DIR",
+        help="Extract train, test, val images to this path",
+    )
 
     # Parser for 'sykepic prob'
     prob_parser = subparsers.add_parser(

@@ -30,6 +30,18 @@ def main(args):
     random_seed = config.getint("dataset", "random_seed")
     model_data = data.ModelData(dataset, split, min_N, max_N, exclude, random_seed)
 
+    if args.save_images:
+        extracted_images_root_dir = Path(args.save_images)
+        (extracted_images_root_dir / "train").mkdir(exist_ok=True, parents=True)
+        (extracted_images_root_dir / "test").mkdir(exist_ok=True)
+        (extracted_images_root_dir / "val").mkdir(exist_ok=True)
+        for img_path in model_data.train_x:
+            shutil.copy(img_path, extracted_images_root_dir / "train" / img_path.name)
+        for img_path in model_data.test_x:
+            shutil.copy(img_path, extracted_images_root_dir / "test" / img_path.name)
+        for img_path in model_data.val_x:
+            shutil.copy(img_path, extracted_images_root_dir / "val" / img_path.name)
+
     # Create distribution plot and exit
     if args.dist:
         out_file = Path(args.dist)
