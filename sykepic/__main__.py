@@ -73,6 +73,13 @@ def main():
         metavar="PATH",
         help="One or more sample paths (raw file without suffix)",
     )
+    prob_raw.add_argument("--image-dir", metavar="DIR", help="Root directory of images")
+    prob_raw.add_argument(
+        "--images",
+        nargs="+",
+        metavar="PATH",
+        help="One or more image paths",
+    )
     prob_parser.add_argument("-m", "--model", required=True, help="Model directory")
     prob_parser.add_argument("-o", "--out", required=True, help="Root output directory")
     prob_parser.add_argument(
