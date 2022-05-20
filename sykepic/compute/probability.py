@@ -25,10 +25,21 @@ EvalParams = namedtuple(
 
 
 def call(args):
-    if args.raw:
-        sample_paths = files.list_sample_paths(args.raw)
+    if args.image_dir or args.images:
+        samples_as_images = True
+        if args.image_dir:
+            img_paths = sorted(Path(args.image_dir).rglob("*.png"))
+        else:
+            img_paths = sorted(Path(path) for path in args.images)
+        sample_paths = {}
+        for sample, img_path in ((p.name.rpartition("_")[0], p) for p in img_paths):
+            sample_paths.setdefault(sample, []).append(img_path)
     else:
-        sample_paths = [Path(path) for path in args.samples]
+        samples_as_images = False
+        if args.raw:
+            sample_paths = files.list_sample_paths(args.raw)
+        else:
+            sample_paths = [Path(path) for path in args.samples]
     main(
         sample_paths,
         args.model,
@@ -37,6 +48,7 @@ def call(args):
         args.num_workers,
         args.force,
         progress_bar=True,
+        samples_as_images=samples_as_images,
     )
 
 
@@ -48,6 +60,7 @@ def main(
     num_workers=2,
     force=False,
     progress_bar=True,
+    samples_as_images=False,
 ):
     # Prepare model
     net, classes, img_shape, eval_transform, device = prepare_model(model_dir)
@@ -59,18 +72,33 @@ def main(
         transform=eval_transform,
         device=device,
     )
-    # Optionally hide tqdm progress bar
-    iterator = tqdm(sample_paths, desc="Progress") if progress_bar else sample_paths
     # Start probability process
-    samples_processed = set()
-    for sample_path in iterator:
-        try:
-            samples_processed.add(
-                process_sample(sample_path, net, params, out_dir, force)
-            )
-        except ValueError:
-            log.exception(f"Faulty raw data for {sample_path.name}")
-    return samples_processed
+    if samples_as_images:
+        # Optionally hide tqdm progress bar
+        iterator = (
+            tqdm(sample_paths.items(), desc="Processing samples")
+            if progress_bar
+            else sample_paths.items()
+        )
+        for sample, img_paths in iterator:
+            csv_path = Path(out_dir) / f"{sample}{FILE_SUFFIX}.csv"
+            process_images(img_paths, net, params, csv_path, force)
+    else:
+        # Optionally hide tqdm progress bar
+        iterator = (
+            tqdm(sample_paths, desc="Processing samples")
+            if progress_bar
+            else sample_paths
+        )
+        samples_processed = set()
+        for sample_path in iterator:
+            try:
+                samples_processed.add(
+                    process_sample(sample_path, net, params, out_dir, force)
+                )
+            except ValueError:
+                log.exception(f"Faulty raw data for {sample_path.name}")
+        return samples_processed
 
 
 def prepare_model(model_dir):
@@ -120,6 +148,21 @@ def process_sample(sample_path, net, params, out_dir, force=False):
     return sample
 
 
+def process_images(img_paths, net, params, csv_path, force=False):
+    if csv_path.is_file():
+        if force:
+            log.warn(f"{csv_path.name} already exists, overwriting")
+        else:
+            log.warn(f"{csv_path.name} already exists, skipping")
+            return
+    dataset = ImageDataset(
+        img_paths, transform=params.transform, num_chans=params.img_shape[0]
+    )
+    dataloader = DataLoader(dataset, params.batch_size, num_workers=params.num_workers)
+    probabilities = net_pass(net, dataloader, params.device)
+    probabilities_to_csv(probabilities, params.classes, csv_path)
+
+
 def net_pass(net, dataloader, device="cpu"):
     """Returns a list of tuples: [(roi, probs),...]"""
 
@@ -130,7 +173,7 @@ def net_pass(net, dataloader, device="cpu"):
         for batch in dataloader:
             x, paths = batch[0].to(device), batch[1]
             out = net(x)
-            rois = tuple(int(Path(p).stem) for p in paths)
+            rois = tuple(int(Path(p).stem.split("_")[-1]) for p in paths)
             # Change softmax exponent by multiplying by log(new_exponent)
             if SOFTMAX_EXP:
                 out = out * np.log(SOFTMAX_EXP)

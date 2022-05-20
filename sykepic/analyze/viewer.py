@@ -324,22 +324,24 @@ class PredictionViewer:
             # Extract multi-index
             sample, roi_num = roi
             try:
-                with open(self.img_dir[sample] / f"{roi_num}.png", "rb") as fh:
+                with open(
+                    self.img_dir[sample] / f"{sample}_{roi_num:05}.png", "rb"
+                ) as fh:
                     img = Image(value=fh.read(), format="png")
             except FileNotFoundError:
                 print("[ERROR] Images have likely been moved due to labeling")
                 print(f"[INFO] Try deleting {self.work_dir}/images")
-                return
+                raise
             # Label to display below each image
             label = Label(f"{confidence:.5f}")
         else:
             try:
-                with open(self.img_dir / f"{roi}.png", "rb") as fh:
+                with open(self.img_dir / f"{self.sample}_{roi:05}.png", "rb") as fh:
                     img = Image(value=fh.read(), format="png")
             except FileNotFoundError:
                 print("[ERROR] Images have likely been moved due to labeling.")
                 print(f"[INFO] Try deleting {self.work_dir}/images")
-                return
+                raise
             label = Label(f"{roi} - {confidence:.5f}")
 
         if self.select:
@@ -364,6 +366,11 @@ class PredictionViewer:
                 predicted_option = option
         if self.extra_labels:
             options.insert(1, *self.extra_labels)
+            # Select previous selection if it is in extra labels
+            if not predicted_option:
+                for name in self.extra_labels:
+                    if name == prediction:
+                        predicted_option = name
         dropdown = Dropdown(options=options, value=predicted_option)
         if self.select:
             # Add listener to dropdown menu
@@ -438,6 +445,7 @@ class PredictionViewer:
     def _move_button_handler(self, button):
         clear_output()
         dest_dir = Path(button.dest.value)
+        copied = []
         with open(self.moved_log, "a") as fh:
             for roi, label in self.labeled.items():
                 if not label or label == self.empty:
@@ -449,9 +457,13 @@ class PredictionViewer:
                 shutil.copy(src, dst)
                 fh.write(f"{roi},{label}\n")
                 print(f"[INFO] Copied {roi} to {dst}")
-                self.moved.append(roi)
-        self.labeled = {}
-        self.sel_log.unlink()
+                copied.append(roi)
+        # Remove copied items from labeled, add them to moved
+        for roi in copied:
+            self.labeled.pop(roi)
+            self.moved.append(roi)
+        # Write updated labeled to file
+        self._log_selections()
         self._cleanup()
 
     def _quit_button_handler(self, button):

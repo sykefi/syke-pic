@@ -85,6 +85,7 @@ def raw_to_png(adc, roi, out_dir=None, force=False):
     for f in (adc, roi):
         if not f.is_file():
             raise FileNotFoundError(f)
+    sample = adc.with_suffix('').name
     out_dir = Path(adc.with_suffix("")) if not out_dir else Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=force)
     # Read bytes from .roi-file into 8-bit integers
@@ -104,7 +105,7 @@ def raw_to_png(adc, roi, out_dir=None, force=False):
             end = start + (roi_x * roi_y)
             # Reshape into 2-dimensions
             img = roi_data[start:end].reshape((roi_y, roi_x))
-            img_path = out_dir / f"{i}.png"
+            img_path = out_dir / f"{sample}_{i:05}.png"
             # imwrite reshapes automatically to 3-dimensions (RGB)
             cv2.imwrite(str(img_path), img)
 

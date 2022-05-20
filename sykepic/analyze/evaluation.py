@@ -13,7 +13,7 @@ def parse_evaluations(
     threshold_search=False,
     search_precision=0.01,
     empty="unclassifiable",
-    unsure="unsure",
+    ignore=None,
 ):
     """Parses evaluation files into various classification measurements.
 
@@ -31,6 +31,8 @@ def parse_evaluations(
         Increment threshold search values by this amount.
     empty : str
         Name used for unclassifiable images in evaluation files.
+    ignore : str, list of str
+        Class names to ignore
 
     Returns
     -------
@@ -44,7 +46,7 @@ def parse_evaluations(
     predictions = []
     for sample in samples:
         try:
-            predictions.append(next(Path(pred_dir).rglob(f"{sample}.csv")))
+            predictions.append(next(Path(pred_dir).rglob(f"{sample}.prob.csv")))
         except StopIteration:
             print(f"[ERROR] Cannot find prediction files for {sample}")
             raise
@@ -57,8 +59,10 @@ def parse_evaluations(
         thresholds = threshold_dictionary(thresholds)
     pred_df = prediction_dataframe(predictions, thresholds)
     search_range = np.arange(0, 1 + search_precision, search_precision)
+    if not isinstance(ignore, list):
+        ignore = [ignore]
     result_df = results_as_df(
-        eval_df, pred_df, thresholds, threshold_search, search_range, empty, unsure
+        eval_df, pred_df, thresholds, threshold_search, search_range, empty, ignore
     )
     if threshold_search:
         # No specificity without 'all' class
@@ -70,14 +74,14 @@ def read_evaluations(evaluations):
     if isinstance(evaluations, (str, Path)):
         evaluations = Path(evaluations)
         if evaluations.is_dir():
-            evaluations = list(evaluations.glob("*.select.csv"))
-            if evaluations:
-                print("[INFO] Evaluations are from these files:")
-                print("\t" + "\n\t".join([str(f) for f in evaluations]))
-            else:
-                raise FileNotFoundError("[ERROR] No evaluation files found")
-        else:
+            evaluations = list(evaluations.rglob("*.select.csv"))
+        elif not isinstance(evaluations, list):
             evaluations = [evaluations]
+    if evaluations:
+        print("[INFO] Evaluations are from these files:")
+        print("\t" + "\n\t".join([str(f) for f in evaluations]))
+    else:
+        raise FileNotFoundError("[ERROR] No evaluation files found")
     df_list = []
     samples = []
     for file in evaluations:
@@ -92,14 +96,14 @@ def read_evaluations(evaluations):
 
 
 def results_as_df(
-    eval_df, pred_df, thres_dict, threshold_search, search_range, empty, unsure
+    eval_df, pred_df, thres_dict, threshold_search, search_range, empty, ignore
 ):
     result_dict = {}
     for idx, row in eval_df.iterrows():
         prediction = pred_df.loc[idx, "prediction"]
         confidence = pred_df.loc[idx, prediction]
         actual = row["actual"]
-        if actual == unsure:
+        if actual in ignore or prediction in ignore:
             # Skip unsure images
             continue
         if threshold_search:
