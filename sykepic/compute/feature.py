@@ -102,7 +102,7 @@ def sample_volume(hdr_file):
             elif line.startswith("runTime"):
                 run_time = float(line.split()[1])
     sample_vol = ifcb_flowrate * ((run_time - inhibit_time) / 60.0)
-    if sample_vol < 0:
+    if sample_vol <= 0:
         raise ValueError(f"Sample volume is {sample_vol}")
     return sample_vol
 
