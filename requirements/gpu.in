@@ -1,0 +1,14 @@
+numpy
+pandas
+matplotlib
+scikit-learn
+opencv-python-headless
+tqdm
+pyyaml
+boto3
+requests
+
+# PyTorch (CUDA 11)
+--extra-index-url https://download.pytorch.org/whl/cu113
+torch>=1.11+cu113
+torchvision>=0.12+cu113
