@@ -18,7 +18,6 @@ from argparse import ArgumentParser
 from sykepic.train import train, dataset
 from sykepic.compute import probability, feature_matlab, classification, size_group
 from sykepic.utils import logger
-from sykepic.sync import process
 
 
 def main():
@@ -113,13 +112,6 @@ def main():
     feat_parser.add_argument(
         "-o", "--out", metavar="DIR", required=True, help="Root output directory"
     )
-
-    # Parser for 'sykepic sync'
-    sync_parser = subparsers.add_parser(
-        "sync", description="Process IFCB data in an infinite loop"
-    )
-    sync_parser.set_defaults(func=process.call)
-    sync_parser.add_argument("config", metavar="FILE", help="Configuration file")
 
     # Parser for 'sykepic dataset'
     dataset_parser = subparsers.add_parser(
