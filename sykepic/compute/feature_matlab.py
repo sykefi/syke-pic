@@ -18,7 +18,16 @@ def call(args):
         sample_paths = files.list_sample_paths(args.raw)
     else:
         sample_paths = [Path(path) for path in args.samples]
-    main(args.matlab, sample_paths, args.out)
+
+    # Don't process samples with a .roi-file over 1G
+    filtered_sample_paths = []
+    for sample_path in sample_paths:
+        if sample_path.with_suffix(".roi").stat().st_size <= 1e9:
+            filtered_sample_paths.append(sample_path)
+        else:
+            log.warn(f"{sample_path.name} is over 1G, skipping")
+
+    main(args.matlab, filtered_sample_paths, args.out)
 
 
 def main(bin, sample_paths, feat_dir):
@@ -146,7 +155,7 @@ def sample_volume(hdr_file):
 
 
 def pixels_to_um3(pixels, micron_factor=3.5):
-    return pixels / (micron_factor ** 3)
+    return pixels / (micron_factor**3)
 
 
 def biovolume_to_biomass(biovol_um3, volume_ml):

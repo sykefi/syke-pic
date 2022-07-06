@@ -40,8 +40,20 @@ def call(args):
             sample_paths = files.list_sample_paths(args.raw)
         else:
             sample_paths = [Path(path) for path in args.samples]
+
+    # Don't process samples with a .roi-file over 1G
+    if not samples_as_images:
+        filtered_sample_paths = []
+        for sample_path in sample_paths:
+            if sample_path.with_suffix(".roi").stat().st_size <= 1e9:
+                filtered_sample_paths.append(sample_path)
+            else:
+                log.warn(f"{sample_path.name} is over 1G, skipping")
+    else:
+        filtered_sample_paths = sample_paths
+
     main(
-        sample_paths,
+        filtered_sample_paths,
         args.model,
         args.out,
         args.batch_size,
