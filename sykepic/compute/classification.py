@@ -161,19 +161,19 @@ def process_sample(
     gdf.loc["Total"] = [total_frequency, total_biovolume_um3, total_biomass_ugl]
 
     # Read feature extraction version from csv
-    with open(feat_csv) as fh:
-        feat_version = int(fh.readline().strip().split("=")[1])
-    if feat_version == 2:
-        # Apply conversion factor for "Dolichospermum-Anabaenopsis-coiled"
-        try:
-            gdf.loc["Dolichospermum-Anabaenopsis-coiled"][
-                "biovolume_um3"
-            ] /= DOLI_COILED_FACTOR_V2
-            gdf.loc["Dolichospermum-Anabaenopsis-coiled"][
-                "biomass_ugl"
-            ] /= DOLI_COILED_FACTOR_V2
-        except KeyError:
-            pass
+    # with open(feat_csv) as fh:
+    #     feat_version = int(fh.readline().strip().split("=")[1])
+    # if feat_version == 2:
+    # Apply conversion factor for "Dolichospermum-Anabaenopsis-coiled"
+    try:
+        gdf.loc["Dolichospermum-Anabaenopsis-coiled"][
+            "biovolume_um3"
+        ] /= DOLI_COILED_FACTOR_V2
+        gdf.loc["Dolichospermum-Anabaenopsis-coiled"][
+            "biomass_ugl"
+        ] /= DOLI_COILED_FACTOR_V2
+    except KeyError:
+        pass
     return gdf
 
 
