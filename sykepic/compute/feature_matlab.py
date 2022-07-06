@@ -27,16 +27,16 @@ def call(args):
         else:
             log.warn(f"{sample_path.name} is over 1G, skipping")
 
-    main(args.matlab, filtered_sample_paths, args.out)
+    main(args.matlab, filtered_sample_paths, args.out, args.parallel)
 
 
-def main(bin, sample_paths, feat_dir):
+def main(bin, sample_paths, feat_dir, parallel):
     feat_dir = Path(feat_dir)
     mat_blob_dir = APP_DIR / "blob"
     mat_feat_dir = APP_DIR / "feat"
     APP_DIR.mkdir(exist_ok=True)
     # IFCB-analysis throws error if trying to run in parallel with just one sample
-    parallel = "true" if len(sample_paths) > 1 else ""
+    parallel = "true" if parallel and len(sample_paths) > 1 else ""
     with (TemporaryDirectory(prefix="tmp-", dir=APP_DIR)) as sym_dir:
         sym_dir = Path(sym_dir)
         symlink_samples(sample_paths, sym_dir)
