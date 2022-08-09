@@ -1,4 +1,4 @@
-def main(args):
+def call(args):
     if args.matlab:
         from . import feature_matlab
 

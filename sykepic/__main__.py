@@ -96,7 +96,7 @@ def main():
 
     # Parser for 'sykepic feat'
     feat_parser = subparsers.add_parser("feat", description="Extract features")
-    feat_parser.set_defaults(func=feature.main)
+    feat_parser.set_defaults(func=feature.call)
     feat_raw = feat_parser.add_mutually_exclusive_group(required=True)
     feat_raw.add_argument(
         "-r", "--raw", metavar="DIR", help="Root directory of raw IFCB data"
