@@ -10,11 +10,11 @@ Args = namedtuple(
 def test_call(tmp_path):
     out_dir = tmp_path / "out"
     arguments = Args(
-        raw="./data/raw/valid/",
+        raw="tests/data/raw/valid/",
         samples=None,
         image_dir=None,
         images=None,
-        model="./model/resnet18_20201022/",
+        model="tests/model/resnet18_20201022/",
         out=out_dir,
         batch_size=64,
         num_workers=2,

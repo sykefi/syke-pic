@@ -12,9 +12,9 @@ Args = namedtuple(
 def test_main(tmp_path):
     out_file = tmp_path / "out.csv"
     arguments = Args(
-        probabilities="./data/prob/",
-        features="./data/feat/",
-        thresholds="./model/thresholds-2021.txt",
+        probabilities="tests/data/prob/",
+        features="tests/data/feat/",
+        thresholds="tests/model/thresholds-2021.txt",
         divisions=None,
         out=out_file,
         summarize="biomass_ugl",

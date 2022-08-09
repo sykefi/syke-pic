@@ -10,7 +10,7 @@ def test_call(tmp_path, matlab):
     """Pass `--matlab /path/to/matlab` to test matlab version"""
     out_dir = tmp_path / "out"
     arguments = Args(
-        raw="./data/raw/valid/",
+        raw="tests/data/raw/valid/",
         samples=None,
         out=out_dir,
         matlab=matlab,
