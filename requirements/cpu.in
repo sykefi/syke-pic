@@ -1,0 +1,12 @@
+numpy
+pandas
+matplotlib
+scikit-learn
+opencv-python-headless
+tqdm
+pyyaml
+
+# PyTorch (CPU)
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch>=1.11+cpu
+torchvision>=0.12+cpu

@@ -16,9 +16,8 @@ Note: Make sure you are using the correct python environment.
 from argparse import ArgumentParser
 
 from sykepic.train import train, dataset
-from sykepic.compute import probability, feature_matlab, classification, size_group
+from sykepic.compute import probability, feature, classification, size_group
 from sykepic.utils import logger
-from sykepic.sync import process
 
 
 def main():
@@ -97,8 +96,7 @@ def main():
 
     # Parser for 'sykepic feat'
     feat_parser = subparsers.add_parser("feat", description="Extract features")
-    feat_parser.set_defaults(func=feature_matlab.call)
-    feat_parser.add_argument("-m", "--matlab", required=True, help="Matlab binary path")
+    feat_parser.set_defaults(func=feature.call)
     feat_raw = feat_parser.add_mutually_exclusive_group(required=True)
     feat_raw.add_argument(
         "-r", "--raw", metavar="DIR", help="Root directory of raw IFCB data"
@@ -113,13 +111,16 @@ def main():
     feat_parser.add_argument(
         "-o", "--out", metavar="DIR", required=True, help="Root output directory"
     )
-
-    # Parser for 'sykepic sync'
-    sync_parser = subparsers.add_parser(
-        "sync", description="Process IFCB data in an infinite loop"
+    feat_parser.add_argument("-m", "--matlab", help="Matlab binary path (and use it)")
+    feat_parser.add_argument(
+        "-p", "--parallel", action="store_true", help="Use multiple cores"
     )
-    sync_parser.set_defaults(func=process.call)
-    sync_parser.add_argument("config", metavar="FILE", help="Configuration file")
+    feat_parser.add_argument(
+        "-f",
+        "--force",
+        action="store_true",
+        help="Force overwrite of previous features (python only)",
+    )
 
     # Parser for 'sykepic dataset'
     dataset_parser = subparsers.add_parser(

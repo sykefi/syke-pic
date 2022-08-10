@@ -1,113 +1,37 @@
-from pathlib import Path
-
-import numpy as np
-import pytest
-import torch
+from collections import namedtuple
 
 from sykepic.compute import probability
-from sykepic.train.network import TorchVisionNet
-from sykepic.train.image import Compose
+
+Args = namedtuple(
+    "Args", "raw samples image_dir images model out batch_size num_workers force"
+)
 
 
-@pytest.fixture
-def net_and_params():
-    model_dir = "tests/models/resnet18_20201022"
-    net, classes, img_shape, eval_transform, device = probability.prepare_model(
-        model_dir
+def test_call(tmp_path):
+    out_dir = tmp_path / "out"
+    arguments = Args(
+        raw="tests/data/raw/valid/",
+        samples=None,
+        image_dir=None,
+        images=None,
+        model="tests/model/resnet18_20201022/",
+        out=out_dir,
+        batch_size=64,
+        num_workers=2,
+        force=False,
     )
-    params = probability.EvalParams(
-        batch_size=32,
-        num_workers=1,
-        classes=classes,
-        img_shape=img_shape,
-        transform=eval_transform,
-        device=device,
-    )
-    return net, params
-
-
-def test_main(tmp_path):
-    sample_paths = [
-        Path("tests/data/raw/valid/D20180712T065600_IFCB114"),
-        Path("tests/data/raw/invalid/D20210523T053149_IFCB114"),
-    ]
-    model_dir = "tests/models/resnet18_20201022"
-    out_dir = tmp_path / "prob"
-    samples_processed = probability.main(
-        sample_paths,
-        model_dir,
-        out_dir,
-        batch_size=32,
-        num_workers=1,
-        progress_bar=False,
-    )
-    assert isinstance(samples_processed, set)
-    assert len(samples_processed) == 1
-    assert len(list(out_dir.glob("**/*.csv"))) == 1
-
-
-def test_prepare_model():
-    model_dir = "tests/models/resnet18_20201022"
-    net, classes, img_shape, eval_transform, device = probability.prepare_model(
-        model_dir
-    )
-    assert isinstance(net, TorchVisionNet)
-    assert isinstance(classes, list)
-    assert isinstance(classes[0], str)
-    assert len(img_shape) == 3
-    assert isinstance(eval_transform, Compose)
-    assert isinstance(device, torch.device)
-
-
-def test_process_sample(net_and_params, tmp_path):
-    net, params = net_and_params
-    sample_path = Path("tests/data/raw/valid/D20180712T065600_IFCB114")
-    out_dir = tmp_path / "prob"
-    sample = probability.process_sample(sample_path, net, params, out_dir, force=False)
-    assert isinstance(sample, str)
-    csv = (
-        out_dir
-        / "2018"
-        / "07"
-        / "12"
-        / f"D20180712T065600_IFCB114{probability.FILE_SUFFIX}.csv"
-    )
-    assert csv.is_file()
-    with open(csv) as fh:
-        header = fh.readline().strip().split(",")
-        line1 = fh.readline().strip().split(",")
-        line2 = fh.readline().strip().split(",")
-    assert header[0] == "roi"
-    assert header[1:] == params.classes
-    line1_sum = sum(map(float, line1[1:]))
-    line2_sum = sum(map(float, line2[1:]))
-    assert abs(line1_sum - 1.0) < 0.001
-    assert abs(line2_sum - 1.0) < 0.001
-
-
-# Not in use
-def slow_test_process_sample(net_and_params, tmp_path):
-    net, params = net_and_params
-    sample_path = Path("tests/data/raw/valid/D20180816T091250_IFCB114")
-    out_dir = tmp_path / "prob"
-    sample = probability.process_sample(sample_path, net, params, out_dir, force=False)
-    assert isinstance(sample, str)
-    csv = next(out_dir.glob("**/*.csv"))
-    assert csv.is_file()
-    with open(csv) as fh:
-        classes = fh.readline().strip().split(",")[1:]
-        apha_idx = classes.index("Aphanizomenon_flosaquae")
-        doli_idx = classes.index("Dolichospermum-Anabaenopsis")
-        osci_idx = classes.index("Oscillatoriales")
-        for i, line in enumerate(fh):
-            line = line.strip().split(",")
-            roi, *probs = line
-            roi = int(roi)
-            if roi in (125, 346, 1253, 1268, 1512):
-                assert np.argmax(probs) == apha_idx
-            elif roi in (1693, 1107):
-                assert np.argmax(probs) == doli_idx
-            elif roi in (294, 1420, 1537):
-                assert np.argmax(probs) == osci_idx
-            if i > 2000:
-                break
+    probability.call(arguments)
+    out_csvs = list(out_dir.glob("**/*.csv"))
+    assert len(out_csvs) == 1
+    with open(out_csvs[0]) as fh:
+        lines = fh.readlines()
+        assert len(lines) == 3
+        header = lines[0].split(",")
+        assert len(header) == 51
+        assert header[0] == "roi"
+        roi_2 = list(filter(None, lines[1].split(",")))
+        roi_3 = list(filter(None, lines[2].split(",")))
+        assert len(roi_2) == len(header)
+        assert len(roi_3) == len(header)
+        assert int(roi_2[0]) == 2
+        assert int(roi_3[0]) == 3
