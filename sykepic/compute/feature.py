@@ -9,7 +9,6 @@ def call(args):
 
             feature_python.call(args)
         except ImportError:
-            breakpoint()
             print(
                 "[ERROR] ifcb_features missing from path, Python features not available"
             )
