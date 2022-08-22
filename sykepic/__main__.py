@@ -202,11 +202,18 @@ def main():
         help="Size group file (required)",
     )
     size_parser.add_argument(
-        "-c",
-        "--column",
+        "-s",
+        "--size-column",
         metavar="FEATURE",
         required=True,
-        help="Feature used to group (required)",
+        help="Feature used to determine groups (required)",
+    )
+    size_parser.add_argument(
+        "-v",
+        "--value-column",
+        metavar="FEATURE",
+        required=False,
+        help="Feature used to aggregate results. Defaults to size-column.",
     )
     size_parser.add_argument(
         "-o",

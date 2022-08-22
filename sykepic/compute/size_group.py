@@ -14,10 +14,12 @@ def call(args):
     if out_file.is_file():
         if not (args.append or args.force):
             raise FileExistsError(f"{out_file} exists, --append or --force not used")
+    value_column = args.value_column if args.value_column else args.size_column
     main(
         feats=feats,
         groups_file=args.groups,
-        size_column=args.column,
+        size_column=args.size_column,
+        value_column=value_column,
         out_csv=args.out,
         append=args.append,
         verbose=not args.quiet,
@@ -26,10 +28,10 @@ def call(args):
 
 
 def main(
-    feats, groups_file, size_column, out_csv, append, verbose=False, px_to_um3=False
+    feats, groups_file, size_column, value_column, out_csv, append, verbose=False, px_to_um3=False
 ):
     groups = read_size_groups(groups_file)
-    df = size_df(feats, groups, size_column, verbose, px_to_um3)
+    df = size_df(feats, groups, size_column, value_column, verbose, px_to_um3)
     df_to_csv(df, out_csv, append)
 
 
@@ -41,7 +43,7 @@ def read_size_groups(path):
     return groups
 
 
-def size_df(feats, groups, size_column, verbose=False, px_to_um3=False):
+def size_df(feats, groups, size_column, value_column, verbose=False, px_to_um3=False):
     rows = []
     if verbose:
         feats = tqdm(feats, desc=f"Processing {len(feats)} samples")
@@ -49,7 +51,7 @@ def size_df(feats, groups, size_column, verbose=False, px_to_um3=False):
         sample = csv.with_suffix("").stem
         if sample.endswith("_biovol"):
             sample = sample.split("_")[0]
-        result_dict = process_sample(csv, groups, size_column, px_to_um3)
+        result_dict = process_sample(csv, groups, size_column, value_column, px_to_um3)
         result_dict["sample"] = sample
         rows.append(result_dict)
     df = pd.DataFrame(rows)
@@ -61,27 +63,32 @@ def size_df(feats, groups, size_column, verbose=False, px_to_um3=False):
     return df
 
 
-def process_sample(csv, groups, size_column, px_to_um3=False):
+def process_sample(csv, groups, size_column, value_column, px_to_um3=False):
     result = {name: 0.0 for name, _ in groups}
     with open(csv) as fh:
         for line in fh:
             if not line.startswith("#"):
                 header = line.strip().split(",")
                 break
-        column_id = None
+        size_column_id = None
+        value_column_id = None
         for i, name in enumerate(header):
             if name == size_column:
-                column_id = i
-                break
-        if column_id is None:
+                size_column_id = i
+            if name == value_column:
+                value_column_id = i
+        if size_column_id is None:
             raise ValueError(f"Column '{size_column}' not found in header")
+        if value_column_id is None:
+            raise ValueError(f"Column '{value_column}' not found in header")
         for line in fh:
             row = line.strip().split(",")
-            size = float(row[column_id])
+            size = float(row[size_column_id])
+            value = float(row[value_column_id])
             if px_to_um3:
                 size = pixels_to_um3(size)
             division = get_group(size, groups)
-            result[division] += size
+            result[division] += value
     return result
 
 
