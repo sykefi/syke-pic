@@ -110,6 +110,8 @@ def main(
                 )
             except ValueError:
                 log.exception(f"Faulty raw data for {sample_path.name}")
+            except Exception as e:
+                log.exception(f"Unexpected error for {sample_path.name}:", e)
         return samples_processed
 
 

@@ -28,7 +28,14 @@ def call(args):
 
 
 def main(
-    feats, groups_file, size_column, value_column, out_csv, append, verbose=False, px_to_um3=False
+    feats,
+    groups_file,
+    size_column,
+    value_column,
+    out_csv,
+    append,
+    verbose=False,
+    px_to_um3=False,
 ):
     groups = read_size_groups(groups_file)
     df = size_df(feats, groups, size_column, value_column, verbose, px_to_um3)
@@ -59,7 +66,8 @@ def size_df(feats, groups, size_column, value_column, verbose=False, px_to_um3=F
     # Reverse column order, so that smallest group is first
     df = df.iloc[:, ::-1]
     # Insert total biomvolume column
-    df.insert(0, "total", df.sum(axis=1))
+    df["total"] = df.sum(axis=1)
+    df.sort_index(inplace=True)
     return df
 
 
