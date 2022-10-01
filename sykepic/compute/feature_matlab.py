@@ -5,7 +5,6 @@ from tempfile import TemporaryDirectory
 
 import pandas as pd
 
-from sykepic import APP_DIR
 from sykepic.utils import files, logger
 
 VERSION = 2
@@ -30,14 +29,14 @@ def call(args):
     main(args.matlab, filtered_sample_paths, args.out, args.parallel)
 
 
-def main(bin, sample_paths, feat_dir, parallel):
-    feat_dir = Path(feat_dir)
-    mat_blob_dir = APP_DIR / "blob"
-    mat_feat_dir = APP_DIR / "feat"
-    APP_DIR.mkdir(exist_ok=True)
+def main(bin, sample_paths, out_dir, parallel):
+    out_dir = Path(out_dir)
+    out_dir.mkdir(exist_ok=True)
+    mat_blob_dir = out_dir / "matlab" / "blob"
+    mat_feat_dir = out_dir / "matlab" / "feat"
     # IFCB-analysis throws error if trying to run in parallel with just one sample
     parallel = "true" if parallel and len(sample_paths) > 1 else ""
-    with (TemporaryDirectory(prefix="tmp-", dir=APP_DIR)) as sym_dir:
+    with (TemporaryDirectory(prefix="tmp-", dir=out_dir)) as sym_dir:
         sym_dir = Path(sym_dir)
         symlink_samples(sample_paths, sym_dir)
         blob_command = (
@@ -59,7 +58,7 @@ def main(bin, sample_paths, feat_dir, parallel):
         result = sample_features(sample_path, mat_feat_dir)
         if result is not None:
             volume, feat_df = result
-            out_csv = files.sample_csv_path(sample_path, feat_dir, FILE_SUFFIX)
+            out_csv = files.sample_csv_path(sample_path, out_dir, FILE_SUFFIX)
             out_csv.parent.mkdir(parents=True, exist_ok=True)
             with open(out_csv, "w") as fh:
                 fh.write(f"# version={VERSION}\n# volume_ml={volume}\n")
@@ -75,7 +74,7 @@ def symlink_samples(sample_paths, sym_dir):
         ):
             sample_sym_dir = sym_dir / sample_path.stem[:9]
             sample_sym_dir.mkdir(exist_ok=True)
-            (sym_dir / sample_sym_dir / raw_file.name).symlink_to(raw_file.resolve())
+            (sample_sym_dir / raw_file.name).symlink_to(raw_file.resolve())
 
 
 def call_matlab(bin, command, name="Matlab"):
