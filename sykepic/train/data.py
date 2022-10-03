@@ -31,10 +31,15 @@ class ModelData:
     def _init_paths(self):
         """Split dataset into lists of paths."""
 
-        train_split, val_split, test_split = self.split
+        if len(self.split) == 3:
+            train_split, val_split, test_split = self.split
+            self.test_x = []
+        else:
+            train_split, val_split = self.split
+            test_split = None
+            self.test_x = None
         self.train_x = []
         self.val_x = []
-        self.test_x = []
         self.distribution = {}
 
         for class_dir in self.dataset.iterdir():
@@ -55,39 +60,52 @@ class ModelData:
             train_stop = int(round(len(paths) * train_split))
             val_stop = train_stop + int(round(len(paths) * val_split))
             train = paths[:train_stop]
-            val = paths[train_stop:val_stop]
-            test = paths[val_stop:]
-            assert train and val and test, (
-                f"'{class_dir.name}' doesn't have enough samples ({len(paths)})."
-                " Consider using another min_N or split value."
-            )
-            self.distribution[class_dir.name] = [
-                len(paths),
-                len(train),
-                len(val),
-                len(test),
-            ]
+            if test_split is None:
+                val = paths[train_stop:]
+                assert train and val, (
+                    f"'{class_dir.name}' doesn't have enough samples ({len(paths)})."
+                    " Consider using another min_N or split value."
+                )
+                self.distribution[class_dir.name] = [
+                    len(paths),
+                    len(train),
+                    len(val),
+                ]
+            else:
+                val = paths[train_stop:val_stop]
+                test = paths[val_stop:]
+                assert train and val and test, (
+                    f"'{class_dir.name}' doesn't have enough samples ({len(paths)})."
+                    " Consider using another min_N or split value."
+                )
+                self.distribution[class_dir.name] = [
+                    len(paths),
+                    len(train),
+                    len(val),
+                    len(test),
+                ]
+                self.test_x.extend(test)
+                random.seed(self.random_seed)
+                random.shuffle(self.test_x)
             self.train_x.extend(train)
             self.val_x.extend(val)
-            self.test_x.extend(test)
         random.seed(self.random_seed)
         random.shuffle(self.train_x)
         random.seed(self.random_seed)
         random.shuffle(self.val_x)
-        random.seed(self.random_seed)
-        random.shuffle(self.test_x)
 
     def _init_labels(self):
         """Get label from each image path."""
 
         train_labels = [path.parent.name for path in self.train_x]
         val_labels = [path.parent.name for path in self.val_x]
-        test_labels = [path.parent.name for path in self.test_x]
         self.le = LabelEncoder()
         self.le.fit_transform(train_labels)
         self.train_y = list(self.le.transform(train_labels))
         self.val_y = list(self.le.transform(val_labels))
-        self.test_y = list(self.le.transform(test_labels))
+        if self.test_x:
+            test_labels = [path.parent.name for path in self.test_x]
+            self.test_y = list(self.le.transform(test_labels))
 
     def save(self, out_dir):
         """Save all relevant information regarding model data."""
@@ -95,7 +113,10 @@ class ModelData:
         out_dir = Path(out_dir)
         Path.mkdir(out_dir, parents=True, exist_ok=True)
         with open(out_dir / "class_distribution.csv", "w") as fh:
-            fh.write("class,total,train,validation,test")
+            header = "class,total,train,validation"
+            if self.test_x:
+                header += ",test"
+            fh.write(header)
             if self.oversampled:
                 fh.write(",oversampled")
             # Order classes alphabetically
@@ -131,9 +152,11 @@ class ModelData:
     ):
         """Read data with PyTorch DataLoaders."""
 
-        self.num_chans = num_chans
+        self.batch_size = batch_size
+        self.num_workers = num_workers
         self.train_transform = train_transform
         self.eval_transform = eval_transform
+        self.num_chans = num_chans
         if self.oversampled:
             train_x = self.train_x + self.over_x
             train_y = self.train_y + self.over_y
@@ -152,18 +175,21 @@ class ModelData:
             num_chans,
             len(self.le.classes_),
         )
-        test_data = ImageDataset(
-            self.test_x,
-            self.test_y,
-            self.eval_transform,
-            num_chans,
-            len(self.le.classes_),
-        )
         self.train_loader = DataLoader(
             train_data, batch_size, shuffle=True, num_workers=num_workers
         )
         self.val_loader = DataLoader(val_data, batch_size, num_workers=num_workers)
-        self.test_loader = DataLoader(test_data, batch_size, num_workers=num_workers)
+        if self.test_x:
+            test_data = ImageDataset(
+                self.test_x,
+                self.test_y,
+                self.eval_transform,
+                num_chans,
+                len(self.le.classes_),
+            )
+            self.test_loader = DataLoader(
+                test_data, batch_size, num_workers=num_workers
+            )
 
 
 class ImageDataset(Dataset):
@@ -249,19 +275,19 @@ def list_files(root_dir, extension, min_N=None, max_N=None, exclude=[], random_s
                 yield filepath.resolve()
 
 
-def auto_id(directory):
+def auto_id(name, directory):
     """Returns the next version number available for a sub-directory.
 
     previous version numbers are extracted from the number after
-    the last underscore i.e. directory/version_1, directory/version_2
-    In this case 3 would be the returned value.
+    the last underscore, e.g., directory/name_1, directory/name_2.
+    In this case, 3 would be returned.
     """
 
     max_id = 0
     directory = Path(directory)
     if directory.is_dir():
-        for path in directory.iterdir():
-            if path.is_dir() and not path.name.startswith("."):
+        for path in directory.glob(f"{name}_*"):
+            if path.is_dir():
                 path_id = int(path.name.split("_")[-1])
                 if path_id > max_id:
                     max_id = path_id
@@ -298,3 +324,21 @@ def combined_shuffle(list1, list2, random_seed=24):
     combined = list(zip(list1, list2))
     random.shuffle(combined)
     return zip(*combined)
+
+
+def extra_eval_dataloader(data_dir, model_data, exclude=[], random_seed=24):
+    x = sorted(list_files(data_dir, ".png", exclude=exclude))
+    random.seed(random_seed)
+    random.shuffle(x)
+    y = [path.parent.name for path in x]
+    y = list(model_data.le.transform(y))
+    dataset = ImageDataset(
+        x,
+        y,
+        model_data.eval_transform,
+        num_chans=3,
+        num_classes=len(model_data.le.classes_),
+    )
+    return DataLoader(
+        dataset, model_data.batch_size, num_workers=model_data.num_workers
+    )

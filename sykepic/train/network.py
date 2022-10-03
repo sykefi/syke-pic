@@ -9,41 +9,57 @@ BN_TYPES = (nn.BatchNorm1d, nn.BatchNorm2d, nn.BatchNorm3d)
 
 
 class TorchVisionNet(nn.Module):
-    """Network with a pretrained TorchVision model as base.
-
-    Currently this only tested with ResNets, so other base models
-    might not work as expected.
-    """
+    """Model with a (pre-trained) TorchVision network as base."""
 
     def __init__(
-        self, model_name, num_classes, head=[256, 128], dropout=[], last_activation=None
+        self,
+        name,
+        num_classes,
+        weights="DEFAULT",
+        head=[256, 128],
+        dropout=[],
+        last_activation=None,
     ):
         """
         Parameters
         ----------
-        model_name : str
-            resnet18, resnet50, etc.
+        name : str
+            Name of a valid TorchVision model, e.g., resnet18, efficientnet_b0.
         num_classes : int
-            Number of neurons to use in the very last layer
-        head : list
+            Number of neurons to use in the very last layer (classification).
+        weights: str, None
+            Pre-trained weights name, DEFAULT = best available,
+            None = no pre-training.
+        head : list[int]
             List of integers, in which every number represents the
             number of neurons in a layer in the network head.
             So these are all the final layers except the last one.
+        dropout : list[tuple[int, float]]
+            List of tuples, where each tuple contains two values (int, float).
+            The first value is the index (relative to the `head`) of where
+            to place the dropout layer, the second is the probability parameter
+            for that dropout.
         last_activation : str
-            Activation function for the last layer
-            e.g. softmax, log_softmax. None is the default.
+            Activation function for the last layer, e.g., softmax, log_softmax.
+            None is the default.
         """
 
         super().__init__()
-        base_model = getattr(models, model_name)(pretrained=True)
-        base_layers = list(base_model.children())[:-1]
-        head.insert(0, base_model.fc.in_features)
+        model = getattr(models, name)(weights=weights)
+        layers = list(model.children())
+        last_linear = layers[-1]
+        if isinstance(last_linear, nn.Sequential):
+            for layer in last_linear:
+                if isinstance(layer, nn.Linear):
+                    last_linear = layer
+                    break
+        head.insert(0, last_linear.in_features)
         head.append(num_classes)  # Last layer has num_classes neurons
         head_layers = [nn.Linear(head[i], head[i + 1]) for i in range(len(head) - 1)]
         if dropout:
             for idx, p in dropout:
                 head_layers.insert(idx, nn.Dropout(p))
-        self.base = nn.Sequential(*base_layers)
+        self.base = nn.Sequential(*layers[:-1])
         self.head = nn.Sequential(*head_layers)
         self.last_activation = last_activation
 
@@ -87,7 +103,8 @@ class LRWarmup:
                 print(f"[INFO] LRWarmup step 1 completed:\n{self.optimizer}")
 
         elif epoch == self.step_2:
-            # Start fine tuning last layer of base
+            # Start fine tuning last sequential layer of base
+            # NOTE! Index -2 might not be correct for all models
             new_part = self.net.base[-2:]
             make_trainable(new_part)
             new_params = list(filter_params(new_part))

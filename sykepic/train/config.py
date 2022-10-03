@@ -59,13 +59,13 @@ def get_transforms(config, img_shape):
 
 
 def get_network(config, num_classes):
-    net = config.get("model", "network")
-    assert net.startswith("resnet"), "Only ResNets are currently supported"
+    network = config.get("model", "network")
+    weights = config.get("model", "weights")
+    weights = None if not weights else weights
     head = [int(i) for i in config.get("model", "head").split(",")]
     dropout = []
     if config.get("model", "dropout"):
         for drop in config.get("model", "dropout").split(";"):
             idx, p = drop.split(",")
             dropout.append((int(idx), float(p)))
-    net = TorchVisionNet(net, num_classes, head, dropout)
-    return net
+    return TorchVisionNet(network, num_classes, weights, head, dropout)

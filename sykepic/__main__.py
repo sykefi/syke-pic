@@ -44,8 +44,8 @@ def main():
     train_parser.add_argument(
         "--collage",
         nargs=3,
-        metavar=("HEIGHT", "WIDTH", "FILE"),
-        help=("Save a HEIGHT x WIDTH collage of training images to FILE."),
+        metavar=("ROWS", "COLUMNS", "FILE"),
+        help=("Save a ROWS x COLUMNS grid of training images to FILE."),
     )
     train_parser.add_argument(
         "--dist", metavar="FILE", help="Save a class distribution plot to FILE"

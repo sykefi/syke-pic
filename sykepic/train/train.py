@@ -22,6 +22,11 @@ def main(args):
     # [dataset]
     dataset = Path(config.get("dataset", "path"))
     split = tuple(float(i) for i in config.get("dataset", "split").split(","))
+    if (s := sum(split)) != 1.0:
+        raise ValueError(f"Dataset split does not add up to 1.0. Got {s}")
+    if len(split) < 2:
+        raise ValueError("Dataset split needs to cover at least train and validation")
+    test_split = len(split) == 3
     min_N = config.get("dataset", "min_N")
     min_N = int(min_N) if min_N else None
     max_N = config.get("dataset", "max_N")
@@ -33,14 +38,17 @@ def main(args):
     if args.save_images:
         extracted_images_root_dir = Path(args.save_images)
         (extracted_images_root_dir / "train").mkdir(exist_ok=True, parents=True)
-        (extracted_images_root_dir / "test").mkdir(exist_ok=True)
         (extracted_images_root_dir / "val").mkdir(exist_ok=True)
         for img_path in model_data.train_x:
             shutil.copy(img_path, extracted_images_root_dir / "train" / img_path.name)
-        for img_path in model_data.test_x:
-            shutil.copy(img_path, extracted_images_root_dir / "test" / img_path.name)
         for img_path in model_data.val_x:
             shutil.copy(img_path, extracted_images_root_dir / "val" / img_path.name)
+        if test_split:
+            (extracted_images_root_dir / "test").mkdir(exist_ok=True)
+            for img_path in model_data.test_x:
+                shutil.copy(
+                    img_path, extracted_images_root_dir / "test" / img_path.name
+                )
 
     # Create distribution plot and exit
     if args.dist:
@@ -51,14 +59,12 @@ def main(args):
         print(f"[INFO] Distribution plot saved to {out_file}")
         return
 
-    if config.getboolean("dataset", "oversample"):
-        decay = config.get("dataset", "oversample_decay")
-        until = config.get("dataset", "oversample_until")
-        if until:
-            until = int(until)
-        elif decay:
-            decay = float(decay)
-        model_data.oversample(until, decay)
+    if oversample_until := config.get("dataset", "oversample_until"):
+        oversample_until = int(oversample_until)
+        model_data.oversample(oversample_until, None)
+    elif oversample_with_decay := config.get("dataset", "oversample_with_decay"):
+        oversample_with_decay = float(oversample_with_decay)
+        model_data.oversample(None, oversample_with_decay)
 
     # [image]
     img_shape = get_img_shape(config)
@@ -91,12 +97,22 @@ def main(args):
     )
     num_classes = len(model_data.le.classes_)
 
+    external_test = config.get("dataset", "external_test")
+    if external_test:
+        extra_test_dataloader = data.extra_eval_dataloader(
+            external_test, model_data, exclude=["Unclassified"]
+        )
+
     # [model]
+    model_network = config.get("model", "network")
     model_id = config.get("model", "id")
     model_dir = Path(config.get("model", "path"))
     if model_id == "auto":
-        model_id = data.auto_id(model_dir)
-    model_dir = model_dir / f"version_{model_id}"
+        model_id = data.auto_id(model_network, model_dir)
+    model_name = model_network
+    if model_id:
+        model_name += f"_{model_id}"
+    model_dir = model_dir / model_name
     model_dir.mkdir(parents=True, exist_ok=config.getboolean("model", "exist_ok"))
     # Save this model's training information
     model_data.save(model_dir)
@@ -161,10 +177,25 @@ def main(args):
         lr_warmup,
     )
     net.load_state_dict(torch.load(best_state))
-    test_report = test_net(net, model_data.test_loader, model_data.le.classes_, device)
-    print(test_report)
-    with open(model_dir / "test_report.txt", "w") as fh:
-        fh.write(test_report)
+    if test_split:
+        test_report = test_net(
+            net, model_data.test_loader, model_data.le.classes_, device
+        )
+        print(test_report)
+        with open(model_dir / "test_report.txt", "w") as fh:
+            fh.write(test_report)
+    if external_test:
+        test_name = Path(external_test).name
+        test_report = test_net(
+            net,
+            extra_test_dataloader,
+            model_data.le.classes_,
+            device,
+            test_name=test_name,
+        )
+        print(test_report)
+        with open(model_dir / f"test_report_{test_name}.txt", "w") as fh:
+            fh.write(test_report)
 
 
 def train_net(
@@ -289,13 +320,16 @@ def train_net(
         return best_state
 
 
-def test_net(net, dataloader, classes, device):
+def test_net(net, dataloader, classes, device, test_name=None):
     # Testing Phase
     net = net.to(device)
     net.eval()
     test_acc = 0.0
     num_samples = 0.0
-    print("\n----- Model Evaluation -----")
+    if test_name:
+        print(f"\n----- Model Evaluation ({test_name}) -----")
+    else:
+        print("\n----- Model Evaluation -----")
     true_labels = []
     predicted_labels = []
     with torch.no_grad():
@@ -310,6 +344,6 @@ def test_net(net, dataloader, classes, device):
     test_acc /= num_samples
     print(f"[STAT] Test Accuracy: {test_acc:.3f}\n")
     test_report = classification_report(
-        true_labels, predicted_labels, target_names=classes
+        true_labels, predicted_labels, target_names=classes, zero_division=0
     )
     return test_report
