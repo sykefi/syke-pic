@@ -50,7 +50,7 @@ pip install -r requirements/cpu.in
 
 In order to perform feature extraction (calculating biovolumes etc.) for the IFCB images, you will need either the Matlab or Python version of the software. The Matlab version can be installed from its original repository: https://github.com/hsosik/ifcb-analysis, but is harder to setup.
 
-The Python version currently configured to work with `syke-pic` is our fork: https://github.com/veot/ifcb-features. The installation is a simple `git clone` and `pip install`.
+The Python version currently configured to work with `syke-pic` is our fork: https://github.com/veot/ifcb-features. The installation is a simple `git clone` and `pip install`. The comparability of the Python version to Matlab version is not yet verified.
 
 ### Installation
 
