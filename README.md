@@ -14,6 +14,8 @@ This repository contains code for training and using convolutional neural networ
 
 The code is still a work in progress. For example, it currently has poor test coverage and has been built and used primarily on a Linux machine. Windows compatibility is not guaranteed for everything.
 
+Contact person: kaisa.kraft@syke.fi
+
 ## Setup
 
 First step is to download the code to your machine:
