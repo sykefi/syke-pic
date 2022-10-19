@@ -89,14 +89,17 @@ def process_sample(csv, groups, size_column, value_column, px_to_um3=False):
             raise ValueError(f"Column '{size_column}' not found in header")
         if value_column_id is None:
             raise ValueError(f"Column '{value_column}' not found in header")
-        for line in fh:
-            row = line.strip().split(",")
-            size = float(row[size_column_id])
-            value = float(row[value_column_id])
-            if px_to_um3:
-                size = pixels_to_um3(size)
-            division = get_group(size, groups)
-            result[division] += value
+        try:
+            for line in fh:
+                row = line.strip().split(",")
+                size = float(row[size_column_id])
+                value = float(row[value_column_id])
+                if px_to_um3:
+                    size = pixels_to_um3(size)
+                division = get_group(size, groups)
+                result[division] += value
+        except Exception as e:
+            print(f"Error while parsing {csv.name}:", e)
     return result
 
 
