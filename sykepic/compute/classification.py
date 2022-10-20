@@ -94,9 +94,7 @@ def class_df(
 
 def swell_df(df):
     # Convert sample names to ISO 8601 timestamps (without microseconds)
-    df.index = df.index.map(sample_to_datetime).map(
-        lambda x: x.tz_localize("UTC").replace(microsecond=0).isoformat()
-    )
+    df.index = df.index.map(lambda x: sample_to_datetime(x, isoformat=True))
     df.index.name = "Time"
     # Sum Dolichospermum-Anabaenopsis variants together
     df["Dolichospermum-Anabaenopsis"] = df[

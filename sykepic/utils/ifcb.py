@@ -6,13 +6,14 @@ from pathlib import Path
 
 import cv2
 import numpy as np
+from pytz import timezone
 
 from . import logger
 
 log = logger.get_logger("ifcb")
 
 
-def sample_to_datetime(sample):
+def sample_to_datetime(sample, isoformat=False):
     """Parse IFCB sample name into a datetime object
 
     If sample name is D20180703T093453_IFCB114, a datetime object
@@ -23,15 +24,22 @@ def sample_to_datetime(sample):
     ----------
     sample : str
         Sample name, with or without a file extension
+    isoformat: bool
+        Whether to return a timestamp string in ISO format
 
     Returns
     -------
     datetime
         A datetime object extracted from sample name
+    string
+        Timestamp with timezone in ISO
     """
 
     m = re.match(r"D(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})", sample)
     timestamp = datetime.datetime(*[int(t) for t in m.groups()])
+    timestamp = timestamp.astimezone(timezone("UTC"))
+    if isoformat:
+        return timestamp.isoformat()
     return timestamp
 
 
@@ -85,7 +93,7 @@ def raw_to_png(adc, roi, out_dir=None, force=False):
     for f in (adc, roi):
         if not f.is_file():
             raise FileNotFoundError(f)
-    sample = adc.with_suffix('').name
+    sample = adc.with_suffix("").name
     out_dir = Path(adc.with_suffix("")) if not out_dir else Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=force)
     # Read bytes from .roi-file into 8-bit integers

@@ -3,6 +3,7 @@ from pathlib import Path
 import pandas as pd
 from tqdm import tqdm
 
+from sykepic.utils.ifcb import sample_to_datetime
 from .feature_matlab import pixels_to_um3
 
 
@@ -24,6 +25,7 @@ def call(args):
         append=args.append,
         verbose=not args.quiet,
         px_to_um3=args.pixels_to_um3,
+        sample_as_time=True,
     )
 
 
@@ -36,9 +38,13 @@ def main(
     append,
     verbose=False,
     px_to_um3=False,
+    sample_as_time=True,
 ):
     groups = read_size_groups(groups_file)
     df = size_df(feats, groups, size_column, value_column, verbose, px_to_um3)
+    if sample_as_time:
+        df.index = df.index.map(lambda x: sample_to_datetime(x, isoformat=True))
+        df.index.name = "time"
     df_to_csv(df, out_csv, append)
 
 
