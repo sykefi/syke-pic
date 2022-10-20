@@ -15,8 +15,8 @@ Note: Make sure you are using the correct python environment.
 
 from argparse import ArgumentParser
 
-from sykepic.train import train, dataset
-from sykepic.compute import probability, feature, classification, size_group
+from sykepic.compute import classification, feature, probability, size_group
+from sykepic.train import train
 from sykepic.utils import logger
 
 
@@ -120,29 +120,6 @@ def main():
         "--force",
         action="store_true",
         help="Force overwrite of previous features (python only)",
-    )
-
-    # Parser for 'sykepic dataset'
-    dataset_parser = subparsers.add_parser(
-        "dataset", description="Create a usable dataset"
-    )
-    dataset_parser.set_defaults(func=dataset.main)
-    dataset_parser.add_argument("original", help="Original dataset path")
-    dataset_parser.add_argument("new", help="New dataset path")
-    dataset_parser.add_argument(
-        "--min",
-        type=int,
-        metavar="INT",
-        help="Mininmum amount of samples per class",
-    )
-    dataset_parser.add_argument(
-        "--max",
-        type=int,
-        metavar="INT",
-        help="Maximum amount samples per class, with random sampling.",
-    )
-    dataset_parser.add_argument(
-        "--exclude", nargs="*", default=[], help="Sub-directories to exlude"
     )
 
     # Parser for `sykepic class`
