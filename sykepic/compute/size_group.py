@@ -25,6 +25,7 @@ def call(args):
         append=args.append,
         verbose=not args.quiet,
         px_to_um3=args.pixels_to_um3,
+        volume_info=args.volume,
         sample_as_time=True,
     )
 
@@ -38,10 +39,13 @@ def main(
     append,
     verbose=False,
     px_to_um3=False,
+    volume_info=False,
     sample_as_time=True,
 ):
     groups = read_size_groups(groups_file)
-    df = size_df(feats, groups, size_column, value_column, verbose, px_to_um3)
+    df = size_df(
+        feats, groups, size_column, value_column, verbose, px_to_um3, volume_info
+    )
     if sample_as_time:
         df.index = df.index.map(lambda x: sample_to_datetime(x, isoformat=True))
         df.index.name = "time"
@@ -56,36 +60,55 @@ def read_size_groups(path):
     return groups
 
 
-def size_df(feats, groups, size_column, value_column, verbose=False, px_to_um3=False):
+def size_df(
+    feats,
+    groups,
+    size_column,
+    value_column,
+    verbose=False,
+    px_to_um3=False,
+    volume_info=False,
+):
     rows = []
+    volumes = []
     if verbose:
         feats = tqdm(feats, desc=f"Processing {len(feats)} samples")
     for csv in feats:
         sample = csv.with_suffix("").stem
         if sample.endswith("_biovol"):
             sample = sample.split("_")[0]
-        result_dict = process_sample(csv, groups, size_column, value_column, px_to_um3)
+        result_dict, volume_ml = process_sample(
+            csv, groups, size_column, value_column, px_to_um3
+        )
         result_dict["sample"] = sample
         rows.append(result_dict)
+        if volume_info:
+            volumes.append(volume_ml)
     df = pd.DataFrame(rows)
     df.set_index("sample", inplace=True)
     # Reverse column order, so that smallest group is first
     df = df.iloc[:, ::-1]
-    # Insert total biomvolume column
+    # Insert total value column
     df["total"] = df.sum(axis=1)
+    if volume_info:
+        df["volume_ml"] = volumes
     df.sort_index(inplace=True)
     return df
 
 
 def process_sample(csv, groups, size_column, value_column, px_to_um3=False):
-    result = {name: 0.0 for name, _ in groups}
+    result_dict = {name: 0 for name, _ in groups}
     with open(csv) as fh:
         for line in fh:
+            if "volume_ml" in line:
+                volume_ml = float(line.strip().split("=")[1])
             if not line.startswith("#"):
                 header = line.strip().split(",")
                 break
         size_column_id = None
         value_column_id = None
+        if value_column == "abundance":
+            header.append("abundance")
         for i, name in enumerate(header):
             if name == size_column:
                 size_column_id = i
@@ -99,14 +122,17 @@ def process_sample(csv, groups, size_column, value_column, px_to_um3=False):
             for line in fh:
                 row = line.strip().split(",")
                 size = float(row[size_column_id])
-                value = float(row[value_column_id])
+                if value_column == "abundance":
+                    value = 1
+                else:
+                    value = float(row[value_column_id])
                 if px_to_um3:
                     size = pixels_to_um3(size)
                 division = get_group(size, groups)
-                result[division] += value
+                result_dict[division] += value
         except Exception as e:
-            print(f"Error while parsing {csv.name}:", e)
-    return result
+            raise Exception(f"while parsing {csv.name}") from e
+    return result_dict, volume_ml
 
 
 def get_group(size, groups):

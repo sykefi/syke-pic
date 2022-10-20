@@ -213,7 +213,10 @@ def main():
         "--value-column",
         metavar="FEATURE",
         required=False,
-        help="Feature used to aggregate results. Defaults to size-column.",
+        help=(
+            "Feature used to aggregate results. Can also be set to 'abundance'. "
+            "Defaults to size-column."
+        ),
     )
     size_parser.add_argument(
         "-o",
@@ -238,6 +241,11 @@ def main():
         "--pixels-to-um3",
         action="store_true",
         help="Convert pixels to um3 before determining size group",
+    )
+    size_parser.add_argument(
+        "--volume",
+        action="store_true",
+        help="Include sample volume in output",
     )
     size_parser.add_argument(
         "-q",
