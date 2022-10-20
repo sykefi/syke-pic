@@ -1,16 +1,18 @@
 """Helper functions for train config file parsing"""
 
-from torchvision.transforms import ToTensor, Normalize
+from configparser import NoOptionError
+
+from torchvision.transforms import Normalize, ToTensor
 
 from .image import (
+    ChangeBrightness,
     Compose,
-    Resize,
     FlipHorizontal,
     FlipVertical,
+    Resize,
+    Rotate,
     Translate,
     Zoom,
-    Rotate,
-    ChangeBrightness,
 )
 from .network import TorchVisionNet
 
@@ -60,8 +62,12 @@ def get_transforms(config, img_shape):
 
 def get_network(config, num_classes):
     network = config.get("model", "network")
-    weights = config.get("model", "weights")
-    weights = None if not weights else weights
+    try:
+        weights = config.get("model", "weights")
+        weights = None if not weights else weights
+    except NoOptionError:
+        # Previous model config didn't have weights option
+        weights = "DEFAULT"
     head = [int(i) for i in config.get("model", "head").split(",")]
     dropout = []
     if config.get("model", "dropout"):
