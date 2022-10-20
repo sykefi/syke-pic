@@ -128,10 +128,17 @@ def main():
     )
 
     # Parser for `sykepic class`
-    class_parser = subparsers.add_parser("class", description="Classify samples")
+    class_parser = subparsers.add_parser(
+        "class",
+        description="Use thresholds together with probabilities for classification",
+    )
     class_parser.set_defaults(func=classification.main)
     class_parser.add_argument("probabilities", help="Root directory of probabilities")
-    class_parser.add_argument("features", help="Root directory of features")
+    class_parser.add_argument(
+        "--feat",
+        metavar="DIR",
+        help="Root directory of features (and use them in results)",
+    )
     class_parser.add_argument(
         "-t",
         "--thresholds",
@@ -153,11 +160,11 @@ def main():
         help="Output CSV-file path (required)",
     )
     class_parser.add_argument(
-        "-s",
-        "--summarize",
+        "-v",
+        "--value-column",
         metavar="FEATURE",
         default="biomass_ugl",
-        help="Which feature to summarize, default is biomass_ugl",
+        help="Feature used to aggregate results, default is biomass_ugl",
     )
     class_parser.add_argument(
         "-a",

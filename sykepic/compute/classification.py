@@ -15,21 +15,24 @@ log = logger.get_logger("class")
 
 def main(args):
     probs = sorted(Path(args.probabilities).glob("**/*.csv"))
-    feats = sorted(Path(args.features).glob("**/*.csv"))
     out_file = Path(args.out)
     if out_file.suffix != ".csv":
         raise ValueError("Make sure output file ends with .csv")
     if out_file.is_file():
         if not (args.append or args.force):
             raise FileExistsError(f"{args.out} exists, --append or --force not used")
-    df = class_df(
-        probs,
-        feats,
-        thresholds_file=args.thresholds,
-        divisions_file=args.divisions,
-        summary_feature=args.summarize,
-        progress_bar=True,
-    )
+    if args.feat:
+        feats = sorted(Path(args.feat).glob("**/*.csv"))
+        df = class_df(
+            probs,
+            feats,
+            thresholds_file=args.thresholds,
+            divisions_file=args.divisions,
+            summary_feature=args.value_column,
+            progress_bar=True,
+        )
+    else:
+        df = class_df_probs_only(probs, args.thresholds, progress_bar=True)
     df = swell_df(df)
     df_to_csv(df, out_file, args.append)
 
@@ -42,7 +45,6 @@ def class_df(
     summary_feature="biomass_ugl",
     progress_bar=False,
 ):
-
     # Read probability thresholds
     thresholds = threshold_dictionary(thresholds_file)
     # Read feature divisions (optional)
@@ -90,6 +92,35 @@ def class_df(
     df.index.name = "sample"
     df.fillna(0, inplace=True)
     return df
+
+
+def class_df_probs_only(probs, thresholds_file, progress_bar=False):
+    thresholds = threshold_dictionary(thresholds_file)
+    classes = list(thresholds.keys()) + ["Total"]
+    rows = []
+    if progress_bar:
+        iterator = tqdm(probs, desc=f"Processing {len(probs)} samples")
+    else:
+        iterator = probs
+    for prob in iterator:
+        sample = prob.with_suffix("").stem
+        try:
+            pdf = prediction_dataframe(prob, thresholds)
+            gdf = pdf.groupby("prediction").sum()
+        except KeyError:
+            continue
+        # frequency is based on the sum of True values in 'classified' column
+        gdf.rename(columns={"classified": "abundance"}, inplace=True)
+        gdf.index.name = "class"
+        # Total frequency is the number of ROIs
+        gdf.loc["Total"] = len(pdf)
+        abun = gdf["abundance"]
+        abun.name = sample
+        rows.append(abun)
+    df = pd.DataFrame(rows, columns=classes)
+    df.index.name = "sample"
+    df.fillna(0, inplace=True)
+    return df.astype(int)
 
 
 def swell_df(df):
