@@ -44,8 +44,8 @@ def main():
     train_parser.add_argument(
         "--collage",
         nargs=3,
-        metavar=("ROWS", "COLUMNS", "FILE"),
-        help=("Save a ROWS x COLUMNS grid of training images to FILE."),
+        metavar=("ROWS", "COLUMNS", "PNG"),
+        help=("Save a ROWS x COLUMNS grid of transformed images to PNG."),
     )
     train_parser.add_argument(
         "--dist", metavar="FILE", help="Save a class distribution plot to FILE"
@@ -69,14 +69,14 @@ def main():
         "-s",
         "--samples",
         nargs="+",
-        metavar="PATH",
+        metavar="SAMPLE PATH",
         help="One or more sample paths (raw file without suffix)",
     )
     prob_raw.add_argument("--image-dir", metavar="DIR", help="Root directory of images")
     prob_raw.add_argument(
         "--images",
         nargs="+",
-        metavar="PATH",
+        metavar="FILE",
         help="One or more image paths",
     )
     prob_parser.add_argument("-m", "--model", required=True, help="Model directory")
@@ -105,13 +105,18 @@ def main():
         "-s",
         "--samples",
         nargs="+",
-        metavar="PATH",
+        metavar="SAMPLE PATH",
         help="One or more sample paths (raw file without suffix)",
     )
     feat_parser.add_argument(
         "-o", "--out", metavar="DIR", required=True, help="Root output directory"
     )
-    feat_parser.add_argument("-m", "--matlab", help="Matlab binary path (and use it)")
+    feat_parser.add_argument(
+        "-m",
+        "--matlab",
+        metavar="FILE",
+        help="Matlab binary path (and use it instead of Python)",
+    )
     feat_parser.add_argument(
         "-p", "--parallel", action="store_true", help="Use multiple cores"
     )
@@ -119,7 +124,7 @@ def main():
         "-f",
         "--force",
         action="store_true",
-        help="Force overwrite of previous features (python only)",
+        help="Force overwrite of previous features (Python only)",
     )
 
     # Parser for `sykepic class`
@@ -143,7 +148,7 @@ def main():
     class_parser.add_argument(
         "-o",
         "--out",
-        metavar="PATH",
+        metavar="FILE",
         required=True,
         help="Output CSV-file path (required)",
     )
@@ -198,7 +203,7 @@ def main():
     size_parser.add_argument(
         "-o",
         "--out",
-        metavar="PATH",
+        metavar="FILE",
         required=True,
         help="Output CSV-file path (required)",
     )
