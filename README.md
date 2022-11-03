@@ -14,6 +14,8 @@ This repository contains code for training and using convolutional neural networ
 
 The code is still a work in progress. For example, it currently has poor test coverage and has been built and used primarily on a Linux machine. Windows compatibility is not guaranteed for everything.
 
+Contact person: kaisa.kraft at syke.fi
+
 ## Setup
 
 First step is to download the code to your machine:
@@ -48,7 +50,7 @@ pip install -r requirements/cpu.in
 
 In order to perform feature extraction (calculating biovolumes etc.) for the IFCB images, you will need either the Matlab or Python version of the software. The Matlab version can be installed from its original repository: https://github.com/hsosik/ifcb-analysis, but is harder to setup.
 
-The Python version currently configured to work with `syke-pic` is our fork: https://github.com/veot/ifcb-features. The installation is a simple `git clone` and `pip install`.
+The Python version currently configured to work with `syke-pic` is our fork: https://github.com/veot/ifcb-features. The installation is a simple `git clone` and `pip install`. The comparability of the Python version to Matlab version is not yet verified.
 
 ### Installation
 
