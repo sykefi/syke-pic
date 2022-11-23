@@ -1,0 +1,91 @@
+[dataset]
+; Data directory that contains class specific image directories.
+path = /path/to/data/train
+; How to split the images between train, validation and test.
+; Test is optional when using `external_test`
+split = 0.9, 0.1
+; Additional dataset to test the model with after training.
+external_test = /path/to/data/test
+; Minimun allowed class size (number of images).
+min_N =
+; Maximum allowed class size, useful for test runs.
+max_N =
+; Classes to exclude from training.
+; Example: Unclassified, Beads
+exclude =
+; Random seed to use when shuffling and splitting data.
+random_seed = 42
+; Oversamples training images until this class size is reached.
+oversample_until = 100
+; Oversamples training images with this exponential decay.
+; Example: 0.995
+oversample_with_decay =
+
+[model]
+; Directory in which to save trained models.
+path = /path/to/models
+; Name of pre-trained network architecture available in PyTorch Hub.
+; More info here: https://pytorch.org/vision/stable/models.html
+; NOTE! Only some of the models have been tested, and only ResNets have been actually used.
+network = resnet18
+; Pre-trained weights to use, see above link for all options.
+; DEFAULT = best available, leave empty for no pre-trained weights.
+weights = DEFAULT
+; Version number attached to end of network name.
+; auto = automatically incrementing number, e.g., resnet18_1, resnet18_2, ...
+id = auto
+; Allow overwriting saved models, won't happen when `id = auto`.
+exist_ok = no
+; New head (i.e., last) layers inserted on top of pre-trained network.
+; The final classification layer is automatically appended to this
+; based on the number of classes.
+head = 256, 128
+; Optional dropout(s) to insert between head layers.
+; Format: index, probability; index, probability; ...
+; Example: -2, 0.5
+; This would insert Dropout(0.5) before second to last head layer.
+dropout =
+
+[image]
+; Resize images to this size. First value is number of color channels.
+shape = 3, 180, 180
+; Transformations to apply (for every image).
+; Options: flip, translate, zoom, rotate, brightness
+; NOTE! Order matters (brightness should always be last)
+augmentations = flip, translate, zoom, brightness
+imagenet_normalization = no
+; Options: mode, black, white
+border = mode
+zoom_range = 0.6, 1.4
+brightness_range = 0.95, 1.1
+max_rotation = 10
+batch_size = 256
+; Parameter for PyTorch's DataLoader.
+num_workers = 8
+
+[train]
+gpu = yes
+max_epochs = 100
+; Training is stopped if validation loss doesn't decrease for this many epochs.
+early_stop_patience = 12
+; Initial learning rate. Both `lr_warmup` and `lr_reduction` will decrease it.
+learning_rate = 0.01
+optimizer = Adam
+
+[lr_warmup]
+; Unlock trainable layers and decrease learning rates incrementally.
+use = yes
+factor_1 = 0.1
+factor_2 = 0.5
+step_1 = 4
+step_2 = 14
+step_3 = 24
+verbose = yes
+
+[lr_reduction]
+; Decrease learning rate when loss stops decreasing.
+use = yes
+factor = 0.1
+; When using `lr_warmup`, patience starts counting only after its `step_3`.
+patience = 4
+verbose = yes
