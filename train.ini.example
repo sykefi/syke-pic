@@ -1,5 +1,6 @@
 [dataset]
 ; Data directory that contains class specific image directories.
+; NOTE! Only .png images are currently supported.
 path = /path/to/data/train
 ; How to split the images between train, validation and test.
 ; Test is optional when using `external_test`
