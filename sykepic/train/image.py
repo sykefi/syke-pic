@@ -45,7 +45,7 @@ class Compose:
                 if h > w:
                     width = True
                     limit = int((target_w - new_w) / 2.5)
-                elif w > h:
+                else:
                     height = True
                     limit = int((target_h - new_h) / 2.5)
                 img = t(img, limit, border, height, width)
