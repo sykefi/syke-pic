@@ -10,6 +10,11 @@ from sykepic.utils.ifcb import sample_to_datetime
 from .prediction import prediction_dataframe, threshold_dictionary
 
 DOLI_COILED_FACTOR_V2 = 7.056
+
+NODU_COILED_FACTOR_BIGBV = 10.697
+NODU_COILED_FACTOR_SMALLBV = 2.546
+NODU_COILED_BV_THRESHOLD = 200000
+
 log = logger.get_logger("class")
 
 
@@ -69,6 +74,7 @@ def class_df(
         if prob_csv.with_suffix("").stem != feat_csv.with_suffix("").stem:
             raise ValueError(f"CSV mismatch: {prob_csv.name} & {feat_csv.name}")
         sample = prob_csv.with_suffix("").stem
+
         # Join prob, feat and classifications in one df
         try:
             sample_df = process_sample(prob_csv, feat_csv, thresholds, divisions)
@@ -164,6 +170,18 @@ def process_sample(
         axis=1,
     )
     df.index.name = "roi"
+
+    #Apply conversion factor for coiled Nodularia
+    for index, row in df.iterrows():
+        if row['prediction'] == "Nodularia_spumigena-coiled":
+            if row['biovolume_um3'] > 1000000:
+                df.drop(index, inplace=True)
+            elif row['biovolume_um3'] < NODU_COILED_BV_THRESHOLD:
+                row['biovolume_um3'] /= NODU_COILED_FACTOR_SMALLBV
+            else:
+                row['biovolume_um3'] /= NODU_COILED_FACTOR_BIGBV
+
+
     # Record total feature results, before dropping unclassified rows
     total_biovolume_um3 = df["biovolume_um3"].sum()
     total_biomass_ugl = df["biomass_ugl"].sum()
@@ -177,7 +195,7 @@ def process_sample(
         df = df.apply(divide_row, axis=1, args=((divisions, division_column)))
 
     # Group rows by prediction
-    group = df.groupby("prediction")
+    group = df.groupby("prediction", observed=False)
     # Join biovolumes and frequencies
     gdf = group.sum()[["classified", "biovolume_um3", "biomass_ugl"]]
     gdf.rename(columns={"classified": "frequency"}, inplace=True)
