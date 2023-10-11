@@ -135,9 +135,9 @@ def swell_df(df):
     df.index.name = "Time"
     # Sum Dolichospermum-Anabaenopsis variants together
     df["Dolichospermum-Anabaenopsis"] = df[
-        ["Dolichospermum-Anabaenopsis", "Dolichospermum-Anabaenopsis-coiled"]
+        ["Dolichospermum-Anabaenopsis", "Dolichospermum-Anabaenopsis_coiled"]
     ].sum(axis=1)
-    df.drop("Dolichospermum-Anabaenopsis-coiled", axis=1, inplace=True)
+    df.drop("Dolichospermum-Anabaenopsis_coiled", axis=1, inplace=True)
     # Sum cyanobacteria
     cyano_sum = df[
         [
@@ -171,10 +171,13 @@ def process_sample(
     )
     df.index.name = "roi"
 
+    
+    NODU_EXC_COUNTER = 0
     #Apply conversion factor for coiled Nodularia
     for index, row in df.iterrows():
         if row['prediction'] == "Nodularia_spumigena-coiled":
             if row['biovolume_um3'] > 1000000:
+                NODU_EXC_COUNTER += 1
                 df.drop(index, inplace=True)
             elif row['biovolume_um3'] < NODU_COILED_BV_THRESHOLD:
                 row['biovolume_um3'] /= NODU_COILED_FACTOR_SMALLBV
@@ -190,16 +193,33 @@ def process_sample(
     df = df[df["classified"]]
     # Make sure rows match (no empty biovolume values)
     assert not any(df.isna().any(axis=1))
+
     # Create intra-class divisions based on volume size
     if divisions:
         df = df.apply(divide_row, axis=1, args=((divisions, division_column)))
 
     # Group rows by prediction
     group = df.groupby("prediction", observed=False)
+
+    # Calculate median biovolume and biomass for coiled Nodularia
+    nodu_bv_median = df.loc[df["prediction"] == "Nodularia_spumigena-coiled"]["biovolume_um3"].median()
+    nodu_bm_median = df.loc[df["prediction"] == "Nodularia_spumigena-coiled"]["biomass_ugl"].median()
+
     # Join biovolumes and frequencies
     gdf = group.sum()[["classified", "biovolume_um3", "biomass_ugl"]]
     gdf.rename(columns={"classified": "frequency"}, inplace=True)
     gdf.index.name = "class"
+
+    # Add the median values times the number of dropped Nodularia images
+    # to coiled Nodularia biovolume and biomass totals 
+    try:
+        gdf.loc["Nodularia_spumigena-coiled",
+            "biovolume_um3"] += (nodu_bv_median*NODU_EXC_COUNTER)
+        gdf.loc["Nodularia_spumigena-coiled",
+            "biomass_ugl"] += (nodu_bm_median*NODU_EXC_COUNTER)
+    except KeyError:
+        pass
+
     # Sort by highest biomass
     gdf.sort_values("biomass_ugl", ascending=False, inplace=True)
     # Drop classes without any predictions
@@ -213,10 +233,10 @@ def process_sample(
     # if feat_version == 2:
     # Apply conversion factor for "Dolichospermum-Anabaenopsis-coiled"
     try:
-        gdf.loc["Dolichospermum-Anabaenopsis-coiled"][
+        gdf.loc["Dolichospermum-Anabaenopsis_coiled",
             "biovolume_um3"
         ] /= DOLI_COILED_FACTOR_V2
-        gdf.loc["Dolichospermum-Anabaenopsis-coiled"][
+        gdf.loc["Dolichospermum-Anabaenopsis_coiled",
             "biomass_ugl"
         ] /= DOLI_COILED_FACTOR_V2
     except KeyError:
