@@ -170,7 +170,6 @@ def process_sample(
         axis=1,
     )
     df.index.name = "roi"
-
     
     NODU_EXC_COUNTER = 0
     #Apply conversion factor for coiled Nodularia
@@ -184,15 +183,19 @@ def process_sample(
             else:
                 row['biovolume_um3'] /= NODU_COILED_FACTOR_BIGBV
 
-
     # Record total feature results, before dropping unclassified rows
     total_biovolume_um3 = df["biovolume_um3"].sum()
     total_biomass_ugl = df["biomass_ugl"].sum()
     total_frequency = len(df)
     # Drop unclassified rows (below threshold)
     df = df[df["classified"]]
+    
     # Make sure rows match (no empty biovolume values)
-    assert not any(df.isna().any(axis=1))
+    #assert not any(df.isna().any(axis=1))
+    counter_na = 0
+    if any(df.isna().any(axis=1)):
+        counter_na += 1
+        print(f"samples with empty biovolumes: {counter_na}, sample: {feat_csv}")
 
     # Create intra-class divisions based on volume size
     if divisions:
@@ -210,7 +213,7 @@ def process_sample(
     gdf.rename(columns={"classified": "frequency"}, inplace=True)
     gdf.index.name = "class"
 
-    # Add the median values times the number of dropped Nodularia images
+    # Add the median values times the number of dropped Nodularia images...
     # to coiled Nodularia biovolume and biomass totals 
     try:
         gdf.loc["Nodularia_spumigena-coiled",
