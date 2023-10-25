@@ -134,18 +134,22 @@ def swell_df(df):
     df.index = df.index.map(lambda x: sample_to_datetime(x, isoformat=True))
     df.index.name = "Time"
     # Sum Dolichospermum-Anabaenopsis variants together
-    df["Dolichospermum-Anabaenopsis"] = df[
-        ["Dolichospermum-Anabaenopsis", "Dolichospermum-Anabaenopsis_coiled"]
-    ].sum(axis=1)
-    df.drop("Dolichospermum-Anabaenopsis_coiled", axis=1, inplace=True)
-    # Sum cyanobacteria
-    cyano_sum = df[
+    doli_sum = df[
         [
-            "Aphanizomenon_flosaquae",
             "Dolichospermum-Anabaenopsis",
-            "Nodularia_spumigena",
+            "Dolichospermum-Anabaenopsis_coiled"
         ]
     ].sum(axis=1)
+    # Sum Nodularia classes
+    nodu_sum = df[
+        [
+            "Nodularia_spumigena",
+            "Nodularia_spumigena-coiled"
+        ]
+    ].sum(axis=1)
+    # Sum cyanobacteria
+    aphano_sum = df["Aphanizomenon_flosaquae"]
+    cyano_sum = aphano_sum + doli_sum + nodu_sum
     df.insert(len(df.columns) - 1, "Filamentous cyanobacteria", cyano_sum)
     # Replace underscores with spaces in class names
     df.columns = df.columns.str.replace("_", " ")
@@ -157,7 +161,7 @@ def df_to_csv(df, out_file, append=False):
     mode = "a" if append else "w"
     df.to_csv(out_file, mode=mode, header=not append)
 
-
+counter_na = 0
 def process_sample(
     prob_csv, feat_csv, thresholds, divisions=None, division_column="biovolume_px"
 ):
@@ -192,8 +196,9 @@ def process_sample(
     
     # Make sure rows match (no empty biovolume values)
     #assert not any(df.isna().any(axis=1))
-    counter_na = 0
+    
     if any(df.isna().any(axis=1)):
+        global counter_na
         counter_na += 1
         print(f"samples with empty biovolumes: {counter_na}, sample: {feat_csv}")
 
@@ -245,7 +250,6 @@ def process_sample(
     except KeyError:
         pass
     return gdf
-
 
 def read_divisions(division_file):
     divisions = {}
