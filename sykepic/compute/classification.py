@@ -11,8 +11,8 @@ from .prediction import prediction_dataframe, threshold_dictionary
 
 DOLI_COILED_FACTOR_V2 = 7.056
 
-NODU_COILED_FACTOR_BIGBV = 10.697
-NODU_COILED_FACTOR_SMALLBV = 2.546
+NODU_COILED_FACTOR = 2.15
+NODU_COILED_BIG_BV = 36431
 NODU_COILED_BV_THRESHOLD = 200000
 
 log = logger.get_logger("class")
@@ -135,21 +135,14 @@ def swell_df(df):
     df.index.name = "Time"
     # Sum Dolichospermum-Anabaenopsis variants together
     doli_sum = df[
-        [
-            "Dolichospermum-Anabaenopsis",
-            "Dolichospermum-Anabaenopsis_coiled"
-        ]
+        ["Dolichospermum-Anabaenopsis", "Dolichospermum-Anabaenopsis_coiled"]
     ].sum(axis=1)
     # Sum Nodularia classes
     nodu_sum = df[
-        [
-            "Nodularia_spumigena",
-            "Nodularia_spumigena-coiled"
-        ]
+        ["Nodularia_spumigena", "Nodularia_spumigena-coiled"]
     ].sum(axis=1)
     # Sum cyanobacteria
-    aphano_sum = df["Aphanizomenon_flosaquae"]
-    cyano_sum = aphano_sum + doli_sum + nodu_sum
+    cyano_sum = df["Aphanizomenon_flosaquae"] + doli_sum + nodu_sum
     df.insert(len(df.columns) - 1, "Filamentous cyanobacteria", cyano_sum)
     # Replace underscores with spaces in class names
     df.columns = df.columns.str.replace("_", " ")
@@ -165,6 +158,17 @@ counter_na = 0
 def process_sample(
     prob_csv, feat_csv, thresholds, divisions=None, division_column="biovolume_px"
 ):
+    
+    # Extract sample volume
+    with open(feat_csv, 'r') as f:
+        for line in f:
+            if line.startswith('#'):
+                header = line
+            else:
+                break #stop when there are no more #
+    header = header[1:].strip().split("=")
+    sample_volume = header[1]
+
     # Join prediction and volume data by index (roi number)
     df = pd.concat(
         [
@@ -174,18 +178,13 @@ def process_sample(
         axis=1,
     )
     df.index.name = "roi"
-    
-    NODU_EXC_COUNTER = 0
-    #Apply conversion factor for coiled Nodularia
-    for index, row in df.iterrows():
-        if row['prediction'] == "Nodularia_spumigena-coiled":
-            if row['biovolume_um3'] > 1000000:
-                NODU_EXC_COUNTER += 1
-                df.drop(index, inplace=True)
-            elif row['biovolume_um3'] < NODU_COILED_BV_THRESHOLD:
-                row['biovolume_um3'] /= NODU_COILED_FACTOR_SMALLBV
-            else:
-                row['biovolume_um3'] /= NODU_COILED_FACTOR_BIGBV
+
+    df.loc[(df["prediction"] == "Nodularia_spumigena-coiled") & (df["biovolume_um3"] < NODU_COILED_BV_THRESHOLD), "biomass_ugl"] /= NODU_COILED_FACTOR
+    try:
+        df.loc[(df["prediction"] == "Nodularia_spumigena-coiled") & (df["biovolume_um3"] >= NODU_COILED_BV_THRESHOLD), "biomass_ugl"] = NODU_COILED_BIG_BV / float(sample_volume) / 1000
+    except ZeroDivisionError:
+        print(f"{feat_csv}: näytetilavuus on 0!")
+        pass
 
     # Record total feature results, before dropping unclassified rows
     total_biovolume_um3 = df["biovolume_um3"].sum()
@@ -196,7 +195,6 @@ def process_sample(
     
     # Make sure rows match (no empty biovolume values)
     #assert not any(df.isna().any(axis=1))
-    
     if any(df.isna().any(axis=1)):
         global counter_na
         counter_na += 1
@@ -209,24 +207,10 @@ def process_sample(
     # Group rows by prediction
     group = df.groupby("prediction", observed=False)
 
-    # Calculate median biovolume and biomass for coiled Nodularia
-    nodu_bv_median = df.loc[df["prediction"] == "Nodularia_spumigena-coiled"]["biovolume_um3"].median()
-    nodu_bm_median = df.loc[df["prediction"] == "Nodularia_spumigena-coiled"]["biomass_ugl"].median()
-
     # Join biovolumes and frequencies
     gdf = group.sum()[["classified", "biovolume_um3", "biomass_ugl"]]
     gdf.rename(columns={"classified": "frequency"}, inplace=True)
     gdf.index.name = "class"
-
-    # Add the median values times the number of dropped Nodularia images...
-    # to coiled Nodularia biovolume and biomass totals 
-    try:
-        gdf.loc["Nodularia_spumigena-coiled",
-            "biovolume_um3"] += (nodu_bv_median*NODU_EXC_COUNTER)
-        gdf.loc["Nodularia_spumigena-coiled",
-            "biomass_ugl"] += (nodu_bm_median*NODU_EXC_COUNTER)
-    except KeyError:
-        pass
 
     # Sort by highest biomass
     gdf.sort_values("biomass_ugl", ascending=False, inplace=True)
