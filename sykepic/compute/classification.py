@@ -179,12 +179,19 @@ def process_sample(
     )
     df.index.name = "roi"
 
+    # nodu_counter = 1
+    # false_counter = 1
+    # for index, row in df.iterrows():
+    #     if row['prediction'] == "Nodularia_spumigena-coiled":
+    #         if row['biovolume_um3'] > NODU_COILED_BV_THRESHOLD:
+    #             print(f"sample: {feat_csv} AND sample volume: {sample_volume} AND images: {nodu_counter}")
+    #             nodu_counter = nodu_counter + 1
+    #             if not row['classified']:
+    #                 print(f"False-tuloksia: {false_counter}")
+    #                 false_counter = false_counter + 1
+
     df.loc[(df["prediction"] == "Nodularia_spumigena-coiled") & (df["biovolume_um3"] < NODU_COILED_BV_THRESHOLD), "biomass_ugl"] /= NODU_COILED_FACTOR
-    try:
-        df.loc[(df["prediction"] == "Nodularia_spumigena-coiled") & (df["biovolume_um3"] >= NODU_COILED_BV_THRESHOLD), "biomass_ugl"] = NODU_COILED_BIG_BV / float(sample_volume) / 1000
-    except ZeroDivisionError:
-        print(f"{feat_csv}: näytetilavuus on 0!")
-        pass
+    df.loc[(df["prediction"] == "Nodularia_spumigena-coiled") & (df["biovolume_um3"] >= NODU_COILED_BV_THRESHOLD), "biomass_ugl"] = NODU_COILED_BIG_BV / float(sample_volume) / 1000
 
     # Record total feature results, before dropping unclassified rows
     total_biovolume_um3 = df["biovolume_um3"].sum()
