@@ -41,6 +41,9 @@ def main(args):
     df = swell_df(df)
     df_to_csv(df, out_file, args.append)
 
+    #cyano_params_to_csv() #need a secondary outfile?
+
+
 
 def class_df(
     probs,
@@ -179,17 +182,6 @@ def process_sample(
     )
     df.index.name = "roi"
 
-    # nodu_counter = 1
-    # false_counter = 1
-    # for index, row in df.iterrows():
-    #     if row['prediction'] == "Nodularia_spumigena-coiled":
-    #         if row['biovolume_um3'] > NODU_COILED_BV_THRESHOLD:
-    #             print(f"sample: {feat_csv} AND sample volume: {sample_volume} AND images: {nodu_counter}")
-    #             nodu_counter = nodu_counter + 1
-    #             if not row['classified']:
-    #                 print(f"False-tuloksia: {false_counter}")
-    #                 false_counter = false_counter + 1
-
     df.loc[(df["prediction"] == "Nodularia_spumigena-coiled") & (df["biovolume_um3"] < NODU_COILED_BV_THRESHOLD), "biomass_ugl"] /= NODU_COILED_FACTOR
     df.loc[(df["prediction"] == "Nodularia_spumigena-coiled") & (df["biovolume_um3"] >= NODU_COILED_BV_THRESHOLD), "biomass_ugl"] = NODU_COILED_BIG_BV / float(sample_volume) / 1000
 
@@ -199,7 +191,7 @@ def process_sample(
     total_frequency = len(df)
     # Drop unclassified rows (below threshold)
     df = df[df["classified"]]
-    
+        
     # Make sure rows match (no empty biovolume values)
     #assert not any(df.isna().any(axis=1))
     if any(df.isna().any(axis=1)):

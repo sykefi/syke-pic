@@ -15,7 +15,7 @@ Note: Make sure you are using the correct python environment.
 
 from argparse import ArgumentParser
 
-from sykepic.compute import classification, feature, probability, size_group
+from sykepic.compute import classification, feature, probability, size_group, abundance
 from sykepic.train import train
 from sykepic.utils import logger
 
@@ -241,6 +241,52 @@ def main():
         "--quiet",
         action="store_true",
         help="Don't display progress bar",
+    )
+
+    # Parser for `sykepic abundance`
+    abundance_parser = subparsers.add_parser(
+        "abundance",
+        description="Count class abundance",
+    )
+    abundance_parser.set_defaults(func=abundance.main)
+    abundance_parser.add_argument("probabilities", help="Root directory of probabilities")
+    abundance_parser.add_argument(
+        "--feat",
+        metavar="DIR",
+        help="Root directory of features (and use them in results)",
+    )
+    abundance_parser.add_argument(
+        "-t",
+        "--thresholds",
+        metavar="FILE",
+        required=True,
+        help="Probability thresholds file (required)",
+    )
+    abundance_parser.add_argument(
+        "-o",
+        "--out",
+        metavar="FILE",
+        required=True,
+        help="Output CSV-file path (required)",
+    )
+    abundance_parser.add_argument(
+        "-v",
+        "--value-column",
+        metavar="FEATURE",
+        default="biomass_ugl",
+        help="Feature used to aggregate results, default is biomass_ugl",
+    )
+    abundance_parser.add_argument(
+        "-a",
+        "--append",
+        action="store_true",
+        help="Append to output file if it exists",
+    )
+    abundance_parser.add_argument(
+        "-f",
+        "--force",
+        action="store_true",
+        help="Overwrite output file if it exists",
     )
 
     # Get arguments for the subparser specified
