@@ -7,7 +7,7 @@ from sykepic.utils import logger
 from sykepic.utils.ifcb import sample_to_datetime
 from .prediction import prediction_dataframe, threshold_dictionary
 
-log = logger.get_logger("palikka")
+log = logger.get_logger("abundance")
 
 def main(args):
     probs = sorted(Path(args.probabilities).glob("**/*.csv"))
@@ -76,7 +76,9 @@ def class_df(
     # Make sure column names are deterministic
     classes = thresholds.keys()
     classes = sorted(classes)
+    classes.append("Total")
     df = pd.DataFrame(df_rows, columns=classes)
+    df["Total"] = total_counts
     df.index.name = "sample"
     df.fillna(0, inplace=True)
     return df
@@ -95,6 +97,7 @@ def df_to_csv(df, out_file, append=False):
     mode = "a" if append else "w"
     df.to_csv(out_file, mode=mode, header=not append)
 
+total_counts = []
 def process_sample(
     prob_csv, feat_csv, thresholds
 ):
@@ -109,10 +112,14 @@ def process_sample(
     )
     df.index.name = "roi"
 
+    # laske kuvien kokonaismäärä
+    global total_counts
+    total_counts.append(len(df. index))
+
     # Drop unclassified rows (below threshold)
     df = df[df["classified"]]
 
     abundances = df.groupby("prediction", observed=False).count()
     abundances.index.name = "class"
-
+    
     return abundances
