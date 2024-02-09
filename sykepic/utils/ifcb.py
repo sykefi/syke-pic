@@ -34,13 +34,13 @@ def sample_to_datetime(sample, isoformat=False):
     string
         Timestamp with timezone in ISO
     """
-
-    m = re.match(r"D(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})", sample)
-    timestamp = datetime.datetime(*[int(t) for t in m.groups()])
-    timestamp = timestamp.astimezone(timezone("UTC"))
+        
+    m = sample[1:16]
+    timestamp = datetime.datetime.strptime(m, "%Y%m%dT%H%M%S")
+    aware_timestamp = timestamp.replace(tzinfo=datetime.timezone.utc)
     if isoformat:
-        return timestamp.isoformat()
-    return timestamp
+        return aware_timestamp.isoformat()
+    return aware_timestamp   
 
 
 def extract_sample_images(sample, raw_dir, out_dir, exist_ok=False):
