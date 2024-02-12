@@ -60,7 +60,6 @@ def class_df(
         if prob_csv.with_suffix("").stem != feat_csv.with_suffix("").stem:
             raise ValueError(f"CSV mismatch: {prob_csv.name} & {feat_csv.name}")
         sample = prob_csv.with_suffix("").stem
-
         # Join prob, feat and classifications in one df
         try:
             sample_df = process_sample(prob_csv, feat_csv, thresholds)
@@ -114,12 +113,13 @@ def process_sample(
 
     # laske kuvien kokonaismäärä
     global total_counts
-    total_counts.append(len(df. index))
+
+    if len(df.index) > 0:
+        total_counts.append(len(df.index))
 
     # Drop unclassified rows (below threshold)
     df = df[df["classified"]]
 
     abundances = df.groupby("prediction", observed=False).count()
     abundances.index.name = "class"
-    
     return abundances
