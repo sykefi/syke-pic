@@ -118,7 +118,7 @@ def sample_volume(hdr_file):
     return sample_vol
 
 
-def pixels_to_um3(pixels, micron_factor=3.5):
+def pixels_to_um3(pixels, micron_factor=2.8):
     return pixels / (micron_factor**3)
 
 
