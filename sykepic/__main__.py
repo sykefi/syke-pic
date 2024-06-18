@@ -182,6 +182,12 @@ def main():
         action="store_true",
         help="Overwrite output file if it exists",
     )
+    class_parser.add_argument(
+        "-exc",
+        "--exclusion_list",
+        metavar="FILE",
+        help="Text file containing a list of sample names to exclude e.g. D20180703T181501",
+    )
 
     # Parser for 'sykepic size'
     size_parser = subparsers.add_parser("size", description="Extract size groups")
@@ -245,6 +251,12 @@ def main():
         "--quiet",
         action="store_true",
         help="Don't display progress bar",
+    )
+    size_parser.add_argument(
+        "-exc",
+        "--exclusion_list",
+        metavar="FILE",
+        help="Text file containing a list of sample names to exclude e.g. D20180703T181501",
     )
 
 

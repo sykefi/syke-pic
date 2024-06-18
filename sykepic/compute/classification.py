@@ -6,7 +6,7 @@ import pandas as pd
 from tqdm import tqdm
 
 from sykepic.utils import logger
-from sykepic.utils.ifcb import sample_to_datetime
+from sykepic.utils.ifcb import sample_to_datetime, filter_out_quality_flagged_samples
 from .prediction import prediction_dataframe, threshold_dictionary
 
 DOLI_COILED_FACTOR_V2 = 7.056
@@ -19,7 +19,13 @@ log = logger.get_logger("class")
 
 
 def main(args):
-    probs = sorted(Path(args.probabilities).glob("**/*.csv"))
+    all_probs = sorted(Path(args.probabilities).glob("**/*.csv"))
+
+    if args.exclusion_list:
+        probs = filter_out_quality_flagged_samples(all_probs, Path(args.exclusion_list))
+    else:
+        probs = all_probs
+
     out_file = Path(args.out)
     if out_file.suffix != ".csv":
         raise ValueError("Make sure output file ends with .csv")

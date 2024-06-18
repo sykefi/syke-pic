@@ -143,3 +143,15 @@ def next_roi(roi_data, adc_line):
     end = start + (roi_x * roi_y)
     # Reshape into 2-dimensions
     return roi_data[start:end].reshape((roi_y, roi_x))
+
+# Gets sample paths and a list of samples to be excluded as parameters
+# Returns sample paths with excluded samples filtered out
+def filter_out_quality_flagged_samples(sample_paths, exclusion_list):
+
+    with open(exclusion_list, 'r') as file:
+        samples_to_exclude = [line.strip() for line in file]
+
+    filtered_paths_strings = [str(path) for path in sample_paths if not any(s in str(path) for s in samples_to_exclude)]
+    filtered_paths = [Path(path_str) for path_str in filtered_paths_strings]
+
+    return filtered_paths
