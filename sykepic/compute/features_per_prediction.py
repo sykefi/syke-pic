@@ -1,4 +1,5 @@
 """Join predictions and features to count sample statistics"""
+"""Currently only works if there're data from at least 2 months!"""
 
 from pathlib import Path
 import pandas as pd
@@ -80,8 +81,8 @@ def class_df(
         except KeyError:
             log.exception(prob_csv.with_suffix("").stem)
             processing_errors += 1
-            continue
-        
+            continue  
+
         if sample_month == current_df_sample_month and (iteration + processing_errors) < iterator_length-1:
             df_rows.append(sample_df)
             iteration += 1
@@ -89,6 +90,7 @@ def class_df(
             df_rows.append(sample_df)
             df_sample_month = pd.concat(df_rows)
             df_list.append(df_sample_month)
+            iteration += 1
         else:
             # append df_rows to df_list
             # then start new df_rows with sample data
@@ -98,7 +100,6 @@ def class_df(
             df_rows.append(sample_df)
             current_df_sample_month = sample_month
             iteration += 1
-
     return df_list
 
 def df_to_csv(df, out_file, append=False):
@@ -109,7 +110,7 @@ def df_to_csv(df, out_file, append=False):
 def process_sample(
     prob_csv, feat_csv, thresholds, sample
 ):
-
+    
     # Join prediction and volume data by index (roi number)
     df = pd.concat(
         [
@@ -129,5 +130,4 @@ def process_sample(
     filaments = df_stats[df_stats["prediction"].isin(filament_labels)]
 
     filaments.insert(0, "sample", sample)
-
     return filaments
