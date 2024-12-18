@@ -305,7 +305,12 @@ def main():
         action="store_true",
         help="Overwrite output file if it exists",
     )
-
+    abundance_parser.add_argument(
+        "-exc",
+        "--exclusion_list",
+        metavar="FILE",
+        help="Text file containing a list of sample names to exclude e.g. D20180703T181501",
+    )
 
 
         # Parser for `sykepic class_stats`
