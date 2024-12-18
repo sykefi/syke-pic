@@ -121,7 +121,7 @@ def class_df_probs_only(probs, thresholds_file, progress_bar=False):
         sample = prob.with_suffix("").stem
         try:
             pdf = prediction_dataframe(prob, thresholds)
-            gdf = pdf.groupby("prediction").sum()
+            gdf = pdf.groupby("prediction", observed = False).sum()
         except KeyError:
             continue
         # frequency is based on the sum of True values in 'classified' column
