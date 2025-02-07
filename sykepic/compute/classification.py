@@ -47,9 +47,6 @@ def main(args):
     df = swell_df(df)
     df_to_csv(df, out_file, args.append)
 
-    #cyano_params_to_csv() #need a secondary outfile?
-
-
 
 def class_df(
     probs,
@@ -239,6 +236,7 @@ def process_sample(
     except KeyError:
         pass
     return gdf
+
 
 def read_divisions(division_file):
     divisions = {}
