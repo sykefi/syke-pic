@@ -120,7 +120,7 @@ def sample_volume(hdr_file):
 
 def pixels_to_um3(pixels, micron_factor=2.8):
     return pixels / (micron_factor**3)
-
+    #The micron factor should be 2.8 for python features v-4, but should still be tested for instruments
 
 def biovolume_to_biomass(biovol_um3, volume_ml):
     try:
