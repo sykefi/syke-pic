@@ -34,13 +34,13 @@ def sample_to_datetime(sample, isoformat=False):
     string
         Timestamp with timezone in ISO
     """
-
-    m = re.match(r"D(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})", sample)
-    timestamp = datetime.datetime(*[int(t) for t in m.groups()])
-    timestamp = timestamp.astimezone(timezone("UTC"))
+        
+    m = sample[1:16]
+    timestamp = datetime.datetime.strptime(m, "%Y%m%dT%H%M%S")
+    aware_timestamp = timestamp.replace(tzinfo=datetime.timezone.utc)
     if isoformat:
-        return timestamp.isoformat()
-    return timestamp
+        return aware_timestamp.isoformat()
+    return aware_timestamp   
 
 
 def extract_sample_images(sample, raw_dir, out_dir, exist_ok=False):
@@ -143,3 +143,15 @@ def next_roi(roi_data, adc_line):
     end = start + (roi_x * roi_y)
     # Reshape into 2-dimensions
     return roi_data[start:end].reshape((roi_y, roi_x))
+
+# Gets sample paths and a list of samples to be excluded as parameters
+# Returns sample paths with excluded samples filtered out
+def filter_out_quality_flagged_samples(sample_paths, exclusion_list):
+
+    with open(exclusion_list, 'r') as file:
+        samples_to_exclude = [line.strip() for line in file]
+
+    filtered_paths_strings = [str(path) for path in sample_paths if not any(s in str(path) for s in samples_to_exclude)]
+    filtered_paths = [Path(path_str) for path_str in filtered_paths_strings]
+
+    return filtered_paths

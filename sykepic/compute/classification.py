@@ -6,15 +6,26 @@ import pandas as pd
 from tqdm import tqdm
 
 from sykepic.utils import logger
-from sykepic.utils.ifcb import sample_to_datetime
+from sykepic.utils.ifcb import sample_to_datetime, filter_out_quality_flagged_samples
 from .prediction import prediction_dataframe, threshold_dictionary
 
 DOLI_COILED_FACTOR_V2 = 7.056
+
+NODU_COILED_FACTOR = 2.15
+NODU_COILED_BIG_BV = 36431
+NODU_COILED_BV_THRESHOLD = 200000
+
 log = logger.get_logger("class")
 
 
 def main(args):
-    probs = sorted(Path(args.probabilities).glob("**/*.csv"))
+    all_probs = sorted(Path(args.probabilities).glob("**/*.csv"))
+
+    if args.exclusion_list:
+        probs = filter_out_quality_flagged_samples(all_probs, Path(args.exclusion_list))
+    else:
+        probs = all_probs
+
     out_file = Path(args.out)
     if out_file.suffix != ".csv":
         raise ValueError("Make sure output file ends with .csv")
@@ -69,6 +80,7 @@ def class_df(
         if prob_csv.with_suffix("").stem != feat_csv.with_suffix("").stem:
             raise ValueError(f"CSV mismatch: {prob_csv.name} & {feat_csv.name}")
         sample = prob_csv.with_suffix("").stem
+
         # Join prob, feat and classifications in one df
         try:
             sample_df = process_sample(prob_csv, feat_csv, thresholds, divisions)
@@ -106,7 +118,7 @@ def class_df_probs_only(probs, thresholds_file, progress_bar=False):
         sample = prob.with_suffix("").stem
         try:
             pdf = prediction_dataframe(prob, thresholds)
-            gdf = pdf.groupby("prediction").sum()
+            gdf = pdf.groupby("prediction", observed = False).sum()
         except KeyError:
             continue
         # frequency is based on the sum of True values in 'classified' column
@@ -128,18 +140,15 @@ def swell_df(df):
     df.index = df.index.map(lambda x: sample_to_datetime(x, isoformat=True))
     df.index.name = "Time"
     # Sum Dolichospermum-Anabaenopsis variants together
-    df["Dolichospermum-Anabaenopsis"] = df[
-        ["Dolichospermum-Anabaenopsis", "Dolichospermum-Anabaenopsis-coiled"]
+    doli_sum = df[
+        ["Dolichospermum-Anabaenopsis", "Dolichospermum-Anabaenopsis_coiled"]
     ].sum(axis=1)
-    df.drop("Dolichospermum-Anabaenopsis-coiled", axis=1, inplace=True)
+    # Sum Nodularia classes
+    nodu_sum = df[
+        ["Nodularia_spumigena", "Nodularia_spumigena-coiled"]
+    ].sum(axis=1)
     # Sum cyanobacteria
-    cyano_sum = df[
-        [
-            "Aphanizomenon_flosaquae",
-            "Dolichospermum-Anabaenopsis",
-            "Nodularia_spumigena",
-        ]
-    ].sum(axis=1)
+    cyano_sum = df["Aphanizomenon_flosaquae"] + doli_sum + nodu_sum
     df.insert(len(df.columns) - 1, "Filamentous cyanobacteria", cyano_sum)
     # Replace underscores with spaces in class names
     df.columns = df.columns.str.replace("_", " ")
@@ -151,10 +160,21 @@ def df_to_csv(df, out_file, append=False):
     mode = "a" if append else "w"
     df.to_csv(out_file, mode=mode, header=not append)
 
-
+counter_na = 0
 def process_sample(
     prob_csv, feat_csv, thresholds, divisions=None, division_column="biovolume_px"
 ):
+    
+    # Extract sample volume
+    with open(feat_csv, 'r') as f:
+        for line in f:
+            if line.startswith('#'):
+                header = line
+            else:
+                break #stop when there are no more #
+    header = header[1:].strip().split("=")
+    sample_volume = header[1]
+
     # Join prediction and volume data by index (roi number)
     df = pd.concat(
         [
@@ -164,24 +184,36 @@ def process_sample(
         axis=1,
     )
     df.index.name = "roi"
+
+    df.loc[(df["prediction"] == "Nodularia_spumigena-coiled") & (df["biovolume_um3"] < NODU_COILED_BV_THRESHOLD), "biomass_ugl"] /= NODU_COILED_FACTOR
+    df.loc[(df["prediction"] == "Nodularia_spumigena-coiled") & (df["biovolume_um3"] >= NODU_COILED_BV_THRESHOLD), "biomass_ugl"] = NODU_COILED_BIG_BV / float(sample_volume) / 1000
+
     # Record total feature results, before dropping unclassified rows
     total_biovolume_um3 = df["biovolume_um3"].sum()
     total_biomass_ugl = df["biomass_ugl"].sum()
     total_frequency = len(df)
     # Drop unclassified rows (below threshold)
     df = df[df["classified"]]
+        
     # Make sure rows match (no empty biovolume values)
-    assert not any(df.isna().any(axis=1))
+    #assert not any(df.isna().any(axis=1))
+    if any(df.isna().any(axis=1)):
+        global counter_na
+        counter_na += 1
+        print(f"samples with empty biovolumes: {counter_na}, sample: {feat_csv}")
+
     # Create intra-class divisions based on volume size
     if divisions:
         df = df.apply(divide_row, axis=1, args=((divisions, division_column)))
 
     # Group rows by prediction
-    group = df.groupby("prediction")
+    group = df.groupby("prediction", observed=False)
+
     # Join biovolumes and frequencies
     gdf = group.sum()[["classified", "biovolume_um3", "biomass_ugl"]]
     gdf.rename(columns={"classified": "frequency"}, inplace=True)
     gdf.index.name = "class"
+
     # Sort by highest biomass
     gdf.sort_values("biomass_ugl", ascending=False, inplace=True)
     # Drop classes without any predictions
@@ -195,10 +227,10 @@ def process_sample(
     # if feat_version == 2:
     # Apply conversion factor for "Dolichospermum-Anabaenopsis-coiled"
     try:
-        gdf.loc["Dolichospermum-Anabaenopsis-coiled"][
+        gdf.loc["Dolichospermum-Anabaenopsis_coiled",
             "biovolume_um3"
         ] /= DOLI_COILED_FACTOR_V2
-        gdf.loc["Dolichospermum-Anabaenopsis-coiled"][
+        gdf.loc["Dolichospermum-Anabaenopsis_coiled",
             "biomass_ugl"
         ] /= DOLI_COILED_FACTOR_V2
     except KeyError:

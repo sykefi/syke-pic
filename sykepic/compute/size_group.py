@@ -3,12 +3,18 @@ from pathlib import Path
 import pandas as pd
 from tqdm import tqdm
 
-from sykepic.utils.ifcb import sample_to_datetime
+from sykepic.utils.ifcb import sample_to_datetime, filter_out_quality_flagged_samples
 from .feature_matlab import pixels_to_um3
 
 
 def call(args):
-    feats = sorted(Path(args.features).glob("**/*.csv"))
+    all_feats = sorted(Path(args.features).glob("**/*.csv"))
+
+    if args.exclusion_list:
+        feats = filter_out_quality_flagged_samples(all_feats, Path(args.exclusion_list))
+    else:
+        feats = all_feats
+
     out_file = Path(args.out)
     if out_file.suffix != ".csv":
         raise ValueError("Make sure output file ends with .csv")

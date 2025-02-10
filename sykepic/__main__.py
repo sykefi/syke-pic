@@ -15,7 +15,8 @@ Note: Make sure you are using the correct python environment.
 
 from argparse import ArgumentParser
 
-from sykepic.compute import classification, feature, probability, size_group
+from sykepic.compute import classification, feature, probability, size_group, abundance, class_stats, features_per_prediction
+
 from sykepic.train import train
 from sykepic.utils import logger
 
@@ -23,6 +24,9 @@ from sykepic.utils import logger
 def main():
     # Set default logger settings
     logger.setup()
+
+    def list_of_strings(arg):
+        return arg.split(',')
 
     parser = ArgumentParser(
         prog="sykepic",
@@ -178,6 +182,12 @@ def main():
         action="store_true",
         help="Overwrite output file if it exists",
     )
+    class_parser.add_argument(
+        "-exc",
+        "--exclusion_list",
+        metavar="FILE",
+        help="Text file containing a list of sample names to exclude e.g. D20180703T181501",
+    )
 
     # Parser for 'sykepic size'
     size_parser = subparsers.add_parser("size", description="Extract size groups")
@@ -242,12 +252,157 @@ def main():
         action="store_true",
         help="Don't display progress bar",
     )
+    size_parser.add_argument(
+        "-exc",
+        "--exclusion_list",
+        metavar="FILE",
+        help="Text file containing a list of sample names to exclude e.g. D20180703T181501",
+    )
+
+
+    # Parser for `sykepic abundance`
+    abundance_parser = subparsers.add_parser(
+        "abundance",
+        description="Count class abundance",
+    )
+    abundance_parser.set_defaults(func=abundance.main)
+    abundance_parser.add_argument("probabilities", help="Root directory of probabilities")
+    abundance_parser.add_argument(
+        "--feat",
+        metavar="DIR",
+        help="Root directory of features (and use them in results)",
+    )
+    abundance_parser.add_argument(
+        "-t",
+        "--thresholds",
+        metavar="FILE",
+        required=True,
+        help="Probability thresholds file (required)",
+    )
+    abundance_parser.add_argument(
+        "-o",
+        "--out",
+        metavar="FILE",
+        required=True,
+        help="Output CSV-file path (required)",
+    )
+    abundance_parser.add_argument(
+        "-v",
+        "--value-column",
+        metavar="FEATURE",
+        default="biomass_ugl",
+        help="Feature used to aggregate results, default is biomass_ugl",
+    )
+    abundance_parser.add_argument(
+        "-a",
+        "--append",
+        action="store_true",
+        help="Append to output file if it exists",
+    )
+    abundance_parser.add_argument(
+        "-f",
+        "--force",
+        action="store_true",
+        help="Overwrite output file if it exists",
+    )
+    abundance_parser.add_argument(
+        "-exc",
+        "--exclusion_list",
+        metavar="FILE",
+        help="Text file containing a list of sample names to exclude e.g. D20180703T181501",
+    )
+
+
+        # Parser for `sykepic class_stats`
+    class_stats_parser = subparsers.add_parser(
+        "class_stats",
+        description="Calculate class statistics",
+    )
+    class_stats_parser.set_defaults(func=class_stats.main)
+    class_stats_parser.add_argument("probabilities", help="Root directory of probabilities")
+    class_stats_parser.add_argument(
+        "--feat",
+        metavar="DIR",
+        help="Root directory of features (and use them in results)",
+    )
+    class_stats_parser.add_argument(
+        "-t",
+        "--thresholds",
+        metavar="FILE",
+        required=True,
+        help="Probability thresholds file (required)",
+    )
+    class_stats_parser.add_argument(
+        "-o",
+        "--out",
+        metavar="FILE",
+        required=True,
+        help="Output CSV-file path (required)",
+    )
+    class_stats_parser.add_argument(
+        "--classes",
+        type = list_of_strings,
+        metavar = "list of strings",
+        help = "Comma-separated list of classes for which to calculate statistics",
+    )
+    class_stats_parser.add_argument(
+        "-a",
+        "--append",
+        action="store_true",
+        help="Append to output file if it exists",
+    )
+    class_stats_parser.add_argument(
+        "-f",
+        "--force",
+        action="store_true",
+        help="Overwrite output file if it exists",
+    )
+
+
+
+        # Parser for `sykepic "features_per_prediction"`
+    features_per_prediction_parser = subparsers.add_parser(
+        "features_per_prediction",
+        description="Combine particle features with prediction",
+    )
+    features_per_prediction_parser.set_defaults(func=features_per_prediction.main)
+    features_per_prediction_parser.add_argument("probabilities", help="Root directory of probabilities")
+    features_per_prediction_parser.add_argument(
+        "--feat",
+        metavar="DIR",
+        help="Root directory of features (and use them in results)",
+    )
+    features_per_prediction_parser.add_argument(
+        "-t",
+        "--thresholds",
+        metavar="FILE",
+        required=True,
+        help="Probability thresholds file (required)",
+    )
+    features_per_prediction_parser.add_argument(
+        "-o",
+        "--out",
+        metavar="FILE",
+        required=True,
+        help="Output CSV-file path (required)",
+    )
+    features_per_prediction_parser.add_argument(
+        "-a",
+        "--append",
+        action="store_true",
+        help="Append to output file if it exists",
+    )
+    features_per_prediction_parser.add_argument(
+        "-f",
+        "--force",
+        action="store_true",
+        help="Overwrite output file if it exists",
+    )
 
     # Get arguments for the subparser specified
     args = parser.parse_args()
     # Call this subparsers default function
     args.func(args)
-
 
 if __name__ == "__main__":
     main()
