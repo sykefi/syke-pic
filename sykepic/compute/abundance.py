@@ -1,5 +1,8 @@
 """Join predictions and features to count sample statistics"""
 
+# Note that the abundance results are not concentrations, but counts of the sample. 
+# For concentrations, analyzed volume needs to be taken into account in postprocessing step
+
 from pathlib import Path
 import pandas as pd
 from tqdm import tqdm
