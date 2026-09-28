@@ -14,7 +14,7 @@ from ifcb_features import compute_features
 from sykepic.utils import files, ifcb, logger
 from PIL import Image
 
-VERSION = "py-v4.1"
+VERSION = "py-v5"
 FILE_SUFFIX = ".feat"
 log = logger.get_logger("feat")
 
@@ -181,7 +181,8 @@ def process_sample_list(
     if sample_type == "img":
         image_features_to_csv(
             roi_features=samples_processed,
-            csv_path=csv_path
+            csv_path=csv_path,
+            device=device
         )
     
 def make_csv_path(sample_type: Literal['ifcb', 'img'], sample_path: Path, out_dir: str, force: bool = False) -> Union[Path, None]:
@@ -494,7 +495,11 @@ def ifcb_features_to_csv(roi_features: List[ROIFeatures], csv_path: Path):
         metadata=metadata
     )
 
-def image_features_to_csv(roi_features: List[ROIFeatures], csv_path: Path):
+def image_features_to_csv(
+    roi_features: List[ROIFeatures],
+    csv_path: Path,
+    device: Literal['ifcb', 'cytosense']
+):
     """
     Save image ROI features to a CSV file.
     Args:
@@ -512,7 +517,11 @@ def image_features_to_csv(roi_features: List[ROIFeatures], csv_path: Path):
     
     metadata = {
         "version": VERSION,
-        "volume_ml": "None"
+        "volume_ml": "None",
+        "device": device,
+        "feature_extractor": "WHOIGit/ifcb-features",
+        "feature_extractor_version": "1.3.0",
+        "micron_factor": MICRON_FACTORS[device]
     }
 
     if roi_features[0].extended_features is not None:
