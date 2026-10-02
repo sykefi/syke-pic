@@ -50,7 +50,8 @@ def class_df(
     # Read probability thresholds
     thresholds = threshold_dictionary(thresholds_file)
     df_rows = []
-    # Ensure probs and feats match
+
+    # Ensure probabilities and features match
     if len(probs) != len(feats):
         iterator = (
             (p, f)
@@ -60,7 +61,8 @@ def class_df(
         )
     else:
         iterator = zip(sorted(probs), sorted(feats))
-    # Add a tqdm progress bar optionally
+
+    # Add a progress bar optionally
     if progress_bar:
         iterator = tqdm(list(iterator), desc=f"Processing {len(feats)} samples")
 
@@ -68,26 +70,42 @@ def class_df(
         # Check that CSVs match
         if prob_csv.with_suffix("").stem != feat_csv.with_suffix("").stem:
             raise ValueError(f"CSV mismatch: {prob_csv.name} & {feat_csv.name}")
-        sample = prob_csv.with_suffix("").stem
-        # Join prob, feat and classifications in one df
-        try:
-            sample_df = process_sample(prob_csv, feat_csv, thresholds)
-        except KeyError:
-            log.exception(prob_csv.with_suffix("").stem)
-            continue
-        # Select specific feature to summarize
-        sample_column = sample_df[summary_feature]
-        sample_column.name = sample
-        df_rows.append(sample_column)
 
-    # Create a collective dataframe for all samples
-    # Make sure column names are deterministic
-    classes = thresholds.keys()
-    classes = sorted(classes)
-    classes.append("Total")
-    df = pd.DataFrame(df_rows, columns=classes)
-    df["Total"] = total_counts
+        sample = prob_csv.with_suffix("").stem
+
+        # Process sample and obtain class counts, total count and volume
+        try:
+            counts, total_count, sample_volume = process_sample(
+                prob_csv, feat_csv, thresholds
+            )
+        except KeyError:
+            log.exception(sample)
+            continue
+
+        # Convert class counts to concentrations per mL
+        row = {
+            class_name: counts.get(class_name, 0) / sample_volume
+            for class_name in sorted(thresholds.keys())
+        }
+
+        # Add total count and analyzed volume
+        row["Total_count"] = total_count
+        row["Total_per_ml"] = total_count / sample_volume
+        row["ml_analyzed"] = sample_volume
+
+        df_rows.append(pd.Series(row, name=sample))
+
+    # Create a collective dataframe
+    df = pd.DataFrame(df_rows)
     df.index.name = "sample"
+
+    # Ensure deterministic column order
+    classes = sorted(thresholds.keys())
+    df = df.reindex(
+        columns=classes + ["Total_count", "Total_per_ml", "ml_analyzed"],
+        fill_value=0,
+    )
+
     df.fillna(0, inplace=True)
     return df
 
@@ -100,17 +118,39 @@ def swell_df(df):
     return df
 
 def df_to_csv(df, out_file, append=False):
-    df = df.astype(int)
     append = append and Path(out_file).is_file()
     mode = "a" if append else "w"
     df.to_csv(out_file, mode=mode, header=not append)
 
 total_counts = []
-def process_sample(
-    prob_csv, feat_csv, thresholds
-):
 
-    # Join prediction and volume data by index (roi number)
+def process_sample(prob_csv, feat_csv, thresholds):
+
+    # Read sample volume from feature-file metadata
+    sample_volume = None
+    with open(feat_csv, "r") as f:
+        for line in f:
+            if not line.startswith("#"):
+                break
+
+            key, value = line[1:].strip().split("=", 1)
+            if key == "volume_ml":
+                sample_volume = value
+                break
+
+    if sample_volume is None or sample_volume == "None":
+        raise ValueError(
+            f"Valid volume_ml metadata not found in feature file: {feat_csv}"
+        )
+
+    sample_volume = float(sample_volume)
+
+    if sample_volume <= 0:
+        raise ValueError(
+            f"volume_ml must be positive in feature file: {feat_csv}"
+        )
+
+    # Join prediction and feature data by ROI number
     df = pd.concat(
         [
             prediction_dataframe(prob_csv, thresholds),
@@ -120,15 +160,24 @@ def process_sample(
     )
     df.index.name = "roi"
 
-    # laske kuvien kokonaismäärä
-    global total_counts
+    # Keep only ROIs with a valid, positive biovolume
+    df = df[
+        df["biovolume_um3"].notna()
+        & (df["biovolume_um3"] > 0)
+    ]
 
-    if len(df.index) > 0:
-        total_counts.append(len(df.index))
+    # Count all valid ROIs, including unclassified ones
+    total_counts.append(len(df))
 
-    # Drop unclassified rows (below threshold)
-    df = df[df["classified"]]
+    # Count only classified ROIs by class
+    classified_df = df[df["classified"]]
+    abundances = classified_df.groupby(
+        "prediction", observed=False
+    ).size()
 
-    abundances = df.groupby("prediction", observed=False).count()
     abundances.index.name = "class"
-    return abundances
+
+    # Convert counts to concentrations per mL
+    abundances = abundances.astype(float) / sample_volume
+
+    return abundances, len(df), sample_volume
