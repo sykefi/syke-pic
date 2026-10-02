@@ -9,7 +9,7 @@ from sykepic.utils import logger
 from sykepic.utils.ifcb import sample_to_datetime, filter_out_quality_flagged_samples
 from .prediction import prediction_dataframe, threshold_dictionary
 
-DOLI_COILED_FACTOR_V2 = 7.056
+DOLI_COILED_FACTOR = 7.056
 
 NODU_COILED_FACTOR = 2.15
 NODU_COILED_BIG_BV = 36431
@@ -17,6 +17,15 @@ NODU_COILED_BV_THRESHOLD = 200000
 
 log = logger.get_logger("class")
 
+def normalize_prediction_names(df):
+    """Normalize equivalent class-name spellings from different classifiers."""
+
+    df["prediction"] = df["prediction"].replace({
+        "Nodularia_spumigena-coiled": "Nodularia_spumigena_coiled",
+        "Dolichospermum-Anabaenopsis-coiled": "Dolichospermum-Anabaenopsis_coiled",
+    })
+
+    return df
 
 def main(args):
     all_probs = sorted(Path(args.probabilities).glob("**/*.csv"))
@@ -145,7 +154,7 @@ def swell_df(df):
     ].sum(axis=1)
     # Sum Nodularia classes
     nodu_sum = df[
-        ["Nodularia_spumigena", "Nodularia_spumigena-coiled"]
+        ["Nodularia_spumigena", "Nodularia_spumigena_coiled"]
     ].sum(axis=1)
     # Sum cyanobacteria
     cyano_sum = df["Aphanizomenon_flosaquae"] + doli_sum + nodu_sum
@@ -165,17 +174,25 @@ def process_sample(
     prob_csv, feat_csv, thresholds, divisions=None, division_column="biovolume_px"
 ):
     
-    # Extract sample volume
-    with open(feat_csv, 'r') as f:
+    # Extract sample volume from feature-file metadata
+    sample_volume = None
+    with open(feat_csv, "r") as f:
         for line in f:
-            if line.startswith('#'):
-                header = line
-            else:
-                break #stop when there are no more #
-    header = header[1:].strip().split("=")
-    sample_volume = header[1]
+            if not line.startswith("#"):
+                break
+
+            key, value = line[1:].strip().split("=", 1)
+            if key == "volume_ml":
+                sample_volume = value
+                break
+
+    if sample_volume is None:
+        raise ValueError(f"volume_ml metadata not found in feature file: {feat_csv}")
+
+    sample_volume = float(sample_volume)
 
     # Join prediction and volume data by index (roi number)
+
     df = pd.concat(
         [
             prediction_dataframe(prob_csv, thresholds),
@@ -185,8 +202,11 @@ def process_sample(
     )
     df.index.name = "roi"
 
-    df.loc[(df["prediction"] == "Nodularia_spumigena-coiled") & (df["biovolume_um3"] < NODU_COILED_BV_THRESHOLD), "biomass_ugl"] /= NODU_COILED_FACTOR
-    df.loc[(df["prediction"] == "Nodularia_spumigena-coiled") & (df["biovolume_um3"] >= NODU_COILED_BV_THRESHOLD), "biomass_ugl"] = NODU_COILED_BIG_BV / float(sample_volume) / 1000
+    # Normalize equivalent class-name spellings from different classifiers
+    df = normalize_prediction_names(df)
+
+    df.loc[(df["prediction"] == "Nodularia_spumigena_coiled") & (df["biovolume_um3"] < NODU_COILED_BV_THRESHOLD), "biomass_ugl"] /= NODU_COILED_FACTOR
+    df.loc[(df["prediction"] == "Nodularia_spumigena_coiled") & (df["biovolume_um3"] >= NODU_COILED_BV_THRESHOLD), "biomass_ugl"] = NODU_COILED_BIG_BV / float(sample_volume) / 1000
 
     # Record total feature results, before dropping unclassified rows
     total_biovolume_um3 = df["biovolume_um3"].sum()
@@ -229,10 +249,10 @@ def process_sample(
     try:
         gdf.loc["Dolichospermum-Anabaenopsis_coiled",
             "biovolume_um3"
-        ] /= DOLI_COILED_FACTOR_V2
+        ] /= DOLI_COILED_FACTOR
         gdf.loc["Dolichospermum-Anabaenopsis_coiled",
             "biomass_ugl"
-        ] /= DOLI_COILED_FACTOR_V2
+        ] /= DOLI_COILED_FACTOR
     except KeyError:
         pass
     return gdf

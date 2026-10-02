@@ -14,7 +14,7 @@ from ifcb_features import compute_features
 from sykepic.utils import files, ifcb, logger
 from PIL import Image
 
-VERSION = "py-v4.1"
+VERSION = "py-v5"
 FILE_SUFFIX = ".feat"
 log = logger.get_logger("feat")
 
@@ -23,56 +23,31 @@ MICRON_FACTORS = {
     'cytosense': 3.6
 }
 
+def compute_ifcb_features(roi_array):
+    """Compute WHOI IFCB features and return them as a dictionary."""
+    _, features, _ = compute_features(roi_array)
+    return dict(features)
+
 # Features from here: https://aslopubs.onlinelibrary.wiley.com/doi/full/10.1002/lno.12171
 EXTENDED_FEATURES = [
     "summedArea",
-
     "ConvexArea",
     "summedConvexArea",
-
     "Perimeter",
     "summedPerimeter",
-
     "ConvexPerimeter",
     "summedConvexPerimeter",
-
-    "shapehist_mean_normEqD",
-    "shapehist_median_normEqD",
-    # "shapehist_mode_normalEqD",  # Not implemented in ifcb-features
-    "shapehist_skewness_normEqD",
-    "shapehist_kurtosis_normEqD",
-
     "Area_over_PerimeterSquared",
     "Area_over_Perimeter",
-
     "summedConvexPerimeter_over_Perimeter",
     "EquivDiameter",
-
-    "RotatedBoundingBox_xwidth",
     "summedMajorAxisLength",
-    "RotatedBoundingBox_ywidth",
     "summedMinorAxisLength",
-
     "Extent",
     "Solidity",
     "Eccentricity",
-    # "Circularity",  # Not implemented in ifcb-features
-    # "Elongation",  # Not implemented in ifcb-features
-    # "PerimeterComplexity_MajorAxis",  # Not implemented in ifcb-features
     "Orientation",
-    "H180",
-    "H90",
-    "Hflip",
-    "H90_over_Hflip",
-    "H90_over_H180",
-    "Hflip_over_H180",
     "summedBiovolume",
-    "texture_average_gray_level",
-    "texture_average_contrast",
-    "texture_smoothness",
-    "texture_third_moment",
-    "texture_uniformity",
-    "texture_entropy"
 ]
 
 def validate_args(args):
@@ -206,7 +181,8 @@ def process_sample_list(
     if sample_type == "img":
         image_features_to_csv(
             roi_features=samples_processed,
-            csv_path=csv_path
+            csv_path=csv_path,
+            device=device
         )
     
 def make_csv_path(sample_type: Literal['ifcb', 'img'], sample_path: Path, out_dir: str, force: bool = False) -> Union[Path, None]:
@@ -364,8 +340,7 @@ def calculate_roi_features(roi_id: str,
     Returns:
         ROIFeatures: A dataclass containing the calculated features for the ROI.
     """
-    _, all_roi_features = compute_features(roi_array)
-    all_roi_features = dict(all_roi_features)
+    all_roi_features = compute_ifcb_features(roi_array)
 
     biovol_px = all_roi_features["Biovolume"]
     area = all_roi_features["Area"]
@@ -500,7 +475,10 @@ def ifcb_features_to_csv(roi_features: List[ROIFeatures], csv_path: Path):
     volume_ml = roi_features[0].volume_ml
     metadata = {
         "version": VERSION,
-        "volume_ml": volume_ml
+        "volume_ml": volume_ml,
+        "feature_extractor": "WHOIGit/ifcb-features",
+        "feature_extractor_version": "1.3.0",
+        "micron_factor": MICRON_FACTORS["ifcb"],
     }
 
     if roi_features[0].extended_features is not None:
@@ -517,7 +495,11 @@ def ifcb_features_to_csv(roi_features: List[ROIFeatures], csv_path: Path):
         metadata=metadata
     )
 
-def image_features_to_csv(roi_features: List[ROIFeatures], csv_path: Path):
+def image_features_to_csv(
+    roi_features: List[ROIFeatures],
+    csv_path: Path,
+    device: Literal['ifcb', 'cytosense']
+):
     """
     Save image ROI features to a CSV file.
     Args:
@@ -535,7 +517,11 @@ def image_features_to_csv(roi_features: List[ROIFeatures], csv_path: Path):
     
     metadata = {
         "version": VERSION,
-        "volume_ml": "None"
+        "volume_ml": "None",
+        "device": device,
+        "feature_extractor": "WHOIGit/ifcb-features",
+        "feature_extractor_version": "1.3.0",
+        "micron_factor": MICRON_FACTORS[device]
     }
 
     if roi_features[0].extended_features is not None:
